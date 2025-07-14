@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dylib
+*.dll
+*.pyc
+*.pyd
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Virtual environments (if any)
+venv/
+.env/
+
+# OS/system files
+.DS_Store
+Thumbs.db
+
+# PyInstaller temp folders
+*.manifest
+*.log
+*.tmp
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp

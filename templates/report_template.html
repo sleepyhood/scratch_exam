@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>채점 결과 리포트</title>
+    <style>
+      body {
+        font-family: "Segoe UI", sans-serif;
+        margin: 40px;
+        background-color: #fafafa;
+      }
+
+      h1 {
+        color: #2c3e50;
+      }
+
+      .summary-box {
+        background-color: #ecf0f1;
+        padding: 15px 20px;
+        border-left: 6px solid #3498db;
+        margin-bottom: 20px;
+        font-size: 1.1em;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 10px;
+        text-align: center;
+      }
+
+      th {
+        background-color: #f7f7f7;
+        color: #2c3e50;
+      }
+
+      tr.correct {
+        background-color: #eafaf1;
+      }
+
+      tr.wrong {
+        background-color: #fff4f4;
+      }
+
+      tr.error {
+        background-color: #fffbe6;
+      }
+
+      .O {
+        color: green;
+        font-weight: bold;
+      }
+
+      .X {
+        color: red;
+        font-weight: bold;
+      }
+
+      .오류 {
+        color: orange;
+        font-weight: bold;
+      }
+
+      .small {
+        font-size: 0.9em;
+        color: #666;
+      }
+
+      ul {
+        list-style: none;
+        padding-left: 0;
+        text-align: left;
+        margin: 0;
+      }
+
+      ul li::before {
+        content: "⚠ ";
+        color: orange;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📝 COS 자격시험 채점 결과</h1>
+    <p class="small">📅 채점일: <strong>{{ today }}</strong></p>
+
+    <div class="summary-box">
+      총 <strong>{{ results|length }}</strong>문제 중
+      <strong style="color: green">{{ correct_count }}</strong>개 정답<br />
+      ⏱ 총 풀이 시간: <strong>{{ total_time_str }} </strong>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>제출</th>
+          <th>정답여부</th>
+          <th>풀이시간(초)</th>
+          <th>오류내용</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr
+          class="{% if r.정답여부 == 'O' %}correct{% elif r.정답여부 == 'X' %}wrong{% else %}error{% endif %}"
+        >
+          <td>{{ r.제출 }}</td>
+          <td class="{{ r.정답여부 }}">{{ r.정답여부 }}</td>
+          <td>{{ r.풀이시간 }}</td>
+          <td>
+            {% if r.오류내용 %}
+            <ul>
+              {% for item in r.오류내용.split("; ") %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+            {% else %} - {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
