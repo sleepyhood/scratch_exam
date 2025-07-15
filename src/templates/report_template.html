@@ -99,6 +99,7 @@
     <table>
       <thead>
         <tr>
+          <th>문제 PDF</th>
           <th>제출</th>
           <th>정답여부</th>
           <th>풀이시간(초)</th>
@@ -110,6 +111,11 @@
         <tr
           class="{% if r.정답여부 == 'O' %}correct{% elif r.정답여부 == 'X' %}wrong{% else %}error{% endif %}"
         >
+          <td>
+            {% if r.문제PDF %}
+            <a href="{{ r.문제PDF }}" target="_blank">보기</a>
+            {% else %} - {% endif %}
+          </td>
           <td>{{ r.제출 }}</td>
           <td class="{{ r.정답여부 }}">{{ r.정답여부 }}</td>
           <td>{{ r.풀이시간 }}</td>

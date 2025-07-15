@@ -549,7 +549,28 @@ class ExamApp(tk.Tk):
         messagebox.showinfo(
             "시험 종료", f"총 문제 수: {total}\n제출: {done}\n건너뜀: {skipped}"
         )
-        self.save_time_log()
+        # self.save_time_log()
+
+    # def save_time_log(self):
+    #     meta_path = self.meta_path  # 이미 self.meta_path 속성이 있다면 사용
+    #     if not meta_path:
+    #         print("⚠ meta_path가 설정되지 않았습니다.")
+    #         return
+
+    #     try:
+    #         with open(meta_path, "r", encoding="utf-8") as f:
+    #             meta = json.load(f)
+
+    #         # 예시: 풀이 시간 로그를 meta에 넣기
+    #         meta["log_saved"] = True  # 단순히 저장됐다는 표시
+
+    #         with open(meta_path, "w", encoding="utf-8") as f:
+    #             json.dump(meta, f, ensure_ascii=False, indent=2)
+
+    #         print("✅ 풀이 시간 로그 저장 완료")
+
+    #     except Exception as e:
+    #         print(f"❌ save_time_log 오류: {e}")
 
     def update_meta_with_time(self):
         meta_path = self.submission_dir / "meta.json"

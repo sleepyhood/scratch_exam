@@ -203,6 +203,10 @@ def grade_from_meta(meta_path):
     for submit_file in submission_dir.glob("*_제출.sb2"):
         base = normalize_name(submit_file.stem)
 
+        # PDF 찾기
+        pdf_path = submit_file.with_name(submit_file.stem.replace("_제출", "") + ".pdf")
+        pdf_rel_path = pdf_path.name if pdf_path.exists() else None
+
         # 정답 후보 찾기
         matched_answer = None
         for ans_file in answer_dir.glob("*.sb2"):
@@ -246,6 +250,7 @@ def grade_from_meta(meta_path):
                         "제출파일경로": str(submit_file),  # ✅ 여기 추가
                         "정답": matched_answer.name,
                         "정답여부": "O",
+                        "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
                     }
                 )
             else:
@@ -259,6 +264,7 @@ def grade_from_meta(meta_path):
                         "정답": matched_answer.name,
                         "정답여부": "X",
                         "오류내용": "; ".join(diff_errors),
+                        "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
                     }
                 )
         except Exception as e:
@@ -269,6 +275,7 @@ def grade_from_meta(meta_path):
                     "정답": matched_answer.name,
                     "정답여부": "오류",
                     "오류내용": f"[normalize or compare 중 오류] {e}",
+                    "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
                 }
             )
 

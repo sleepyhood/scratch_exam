@@ -2,6 +2,7 @@ from exam_selector import ExamSelector
 from loading_json import load_config
 from pathlib import Path
 from html_report import save_results_as_html
+import traceback
 
 # 사용 예시
 config = load_config()
@@ -33,5 +34,6 @@ if __name__ == "__main__":
             )
         else:
             print("❌ meta.json 파일이 존재하지 않습니다. 채점 생략.")
-    except:
-        print("프로그램 종료됌")
+    except Exception as e:
+        print("⚠️ 예외 발생:")
+        traceback.print_exc()
