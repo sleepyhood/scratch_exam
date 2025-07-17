@@ -7,7 +7,10 @@ from bootstrap import jinja2
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 import sys
-
+def get_next_regrade_count(output_dir):
+    output_dir = Path(output_dir)
+    existing = list(output_dir.glob("재채점_*회차_채점결과.html"))
+    return len(existing) + 1
 
 def format_time(seconds):
     minutes = int(seconds) // 60
@@ -15,7 +18,7 @@ def format_time(seconds):
     return f"{minutes}분 {secs}초"
 
 
-def save_results_as_html(results, meta_path=None, output_filename="채점결과.html"):
+def save_results_as_html(results, meta_path=None, output_filename="채점결과.html", output_dir=None, regrade_count=None):
 
     import json
 
@@ -59,9 +62,20 @@ def save_results_as_html(results, meta_path=None, output_filename="채점결과.
         correct_count=correct_count,
         today=today,
         total_time_str=format_time(total_time),  # ← 이 한 줄만 추가!
+                regrade_count=regrade_count,  # ← 템플릿에서 사용 가능하게 넘겨줌
+
     )
 
-    output_path = Path.home() / "Desktop" / output_filename
+    if output_dir is None:
+        output_path = Path.home() / "Desktop" / output_filename
+    else:
+        output_path = Path(output_dir) / output_filename
+
+    if regrade_count is not None:
+        regrade_count = get_next_regrade_count(output_dir)
+        output_filename = f"재채점_{regrade_count}회차_채점결과.html"
+    
+    #output_path = Path.home() / "Desktop" / output_filename
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(rendered_html)
 

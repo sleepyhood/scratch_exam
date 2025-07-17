@@ -53,6 +53,11 @@ class ExamSelector(tk.Tk):
         )
         self.start_btn.pack(pady=20)
 
+        self.regrade_btn = tk.Button(
+            self, text="재채점 실행", command=self.select_folder_for_regrade
+        )
+        self.regrade_btn.pack(pady=10)
+
         # self.label = tk.Label(self, text="시험 등급을 선택하세요", font=("Arial", 16))
         # self.label.pack(pady=20)
 
@@ -62,6 +67,21 @@ class ExamSelector(tk.Tk):
         # self.show_exam_types()
 
         # def set_icon(self):
+
+    def select_folder_for_regrade(self):
+        from tkinter import filedialog
+        from grader import regrade_submission_folder
+
+        folder = filedialog.askdirectory(title="제출 폴더 선택")
+        if not folder:
+            return
+
+        try:
+            regrade_submission_folder(folder)
+            messagebox.showinfo("완료", "재채점이 완료되었습니다.")
+        except Exception as e:
+            messagebox.showerror("오류", f"재채점 중 오류 발생: {e}")
+
 
     def get_exam_types(self):
         return [

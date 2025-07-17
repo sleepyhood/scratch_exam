@@ -4,3 +4,4 @@ pywin32
 psutil
 pyautogui
 jinja2
+pandas

@@ -88,6 +88,10 @@
   </head>
   <body>
     <h1>📝 COS 자격시험 채점 결과</h1>
+    {% if regrade_count %}
+<h2>🌀 재채점 {{ regrade_count }}회차</h2>
+{% endif %}
+
     <p class="small">📅 채점일: <strong>{{ today }}</strong></p>
 
     <div class="summary-box">

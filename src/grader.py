@@ -79,6 +79,10 @@ def compare_normalized_projects(s_project, a_project):
     all_names = set(s_sprites.keys()).union(a_sprites.keys())
 
     for name in sorted(all_names):
+        # "보기블럭"은 채점에서 제외
+        if name == "보기블럭":
+            continue
+
         s = s_sprites.get(name)
         a = a_sprites.get(name)
 
@@ -295,3 +299,21 @@ def print_results(results):
         if status == "오류" or r.get("오류내용"):
             line += f"\n    ⚠ 오류내용: {r['오류내용']}"
         print(line)
+
+
+
+def regrade_submission_folder(folder_path):
+    """
+    제출 폴더에 있는 meta.json을 기준으로 재채점 실행
+    """
+    meta_path = Path(folder_path) / "meta.json"
+    if not meta_path.exists():
+        print(f"⚠ meta.json이 없습니다: {meta_path}")
+        return
+
+    results = grade_from_meta(meta_path)
+    print_results(results)
+
+    # html_report.py와 연동도 가능
+    from html_report import save_results_as_html
+    save_results_as_html(results, meta_path, output_dir=folder_path, regrade_count=1)

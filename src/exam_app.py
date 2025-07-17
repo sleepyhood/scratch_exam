@@ -156,6 +156,57 @@ class ExamApp(tk.Tk):
 
         super().__init__()
 
+
+        # ✅ 문제지 PDF 복사: 이름에 날짜와 학생 이름을 포함
+        try:
+            today = datetime.now().strftime("%Y%m%d")
+            pdf_filename = f"{username}_{exam_round_name}_{today}_문제지.pdf"
+            pdf_copy_path = self.submission_dir / pdf_filename
+
+            if not pdf_copy_path.exists():
+                copy2(pdf_path, pdf_copy_path)
+                print(f"✅ 문제지 PDF 복사 완료: {pdf_copy_path}")
+            else:
+                print("⚠ 이미 PDF가 복사되어 있습니다:", pdf_copy_path)
+
+            self.pdf_copied_path = pdf_copy_path  # 나중에 meta 저장 등에서 사용 가능
+
+        except Exception as e:
+            print(f"❌ PDF 복사 중 오류 발생: {e}")
+
+
+        # ✅ 원본 문제 파일들과 정답 파일들도 함께 복사
+        try:
+            # 문제 폴더: sb2_files에서 추출
+            for sb2_path in sb2_files:
+                sb2_name = Path(sb2_path).name
+                dest_path = self.submission_dir / sb2_name
+                if not dest_path.exists():
+                    copy2(sb2_path, dest_path)
+                    print(f"📄 문제 복사: {sb2_name}")
+
+            # 정답 폴더 추측: 문제 폴더 형제 폴더 중 '정답' 포함 폴더
+            parent = Path(problem_folder).parent
+            answer_folder = next(
+                (parent / d for d in os.listdir(parent) if "정답" in d),
+                None,
+            )
+
+            if answer_folder and answer_folder.exists():
+                for file in os.listdir(answer_folder):
+                    if file.endswith(".sb2"):
+                        src = answer_folder / file
+                        dst = self.submission_dir / file
+                        if not dst.exists():
+                            copy2(src, dst)
+                            print(f"📄 정답 복사: {file}")
+            else:
+                print("⚠ 정답 폴더를 찾을 수 없습니다.")
+
+        except Exception as e:
+            print(f"❌ 문제/정답 복사 중 오류: {e}")
+
+
         self.title("자격증 시험 시뮬레이터")
         self.geometry("1200x800")
 
