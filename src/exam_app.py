@@ -13,9 +13,16 @@ import threading
 from datetime import datetime
 import json
 from pdf_viewer import PDFPageViewer
-from bootstrap import fitz, Image, ImageTk, copy2, win32gui, win32api, win32con, psutil
-from loading_json import load_config
+import bootstrap  # 설치용
 
+# 외부 패키지는 직접 import
+from PIL import Image, ImageTk
+from shutil import copy2
+import win32gui, win32api, win32con
+import psutil
+
+from loading_json import load_config
+import fitz  # 외부 모듈은 직접 import
 
 # 사용 예시
 config = load_config()

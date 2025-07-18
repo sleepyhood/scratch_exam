@@ -6,8 +6,11 @@ import traceback
 
 # 사용 예시
 config = load_config()
-default_exam_folder = config["default_exam_folder"]
+#default_exam_folder = config["default_exam_folder"]
+default_exam_folder = config["default_exam_folder_toDCT2"]
 
+default_exam_folder = Path(default_exam_folder)
+print(default_exam_folder)
 
 if __name__ == "__main__":
 

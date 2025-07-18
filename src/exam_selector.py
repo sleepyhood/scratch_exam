@@ -13,8 +13,9 @@ from tkinter import messagebox
 class ExamSelector(tk.Tk):
     def __init__(self, base_path):
         super().__init__()
-
         self.base_path = base_path
+        print(f"ExamSelector self.base_path: {self.base_path}")
+        
         self.submission_meta_path = None  # ✅ 제출본 경로 저장용
 
         # 창 크기
@@ -122,6 +123,8 @@ class ExamSelector(tk.Tk):
     def show_exam_types(self):
         self.label.config(text="시험 등급을 선택하세요")
         self.clear_widgets()
+
+        
 
         for folder in os.listdir(self.base_path):
             folder_path = os.path.join(self.base_path, folder)
