@@ -316,4 +316,5 @@ def regrade_submission_folder(folder_path):
 
     # html_report.py와 연동도 가능
     from html_report import save_results_as_html
-    save_results_as_html(results, meta_path, output_dir=folder_path, regrade_count=1)
+    #save_results_as_html(results, meta_path, regrade_count=1)
+    save_results_as_html(results, meta_path=meta_path, regrade_mode=True)
