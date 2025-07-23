@@ -184,15 +184,18 @@ class ExamApp(tk.Tk):
 
         # ✅ 원본 문제 파일들과 정답 파일들도 함께 복사
         try:
-            # 문제 폴더: sb2_files에서 추출
+            # 문제 폴더 경로 생성
+            problem_dest_dir = self.submission_dir / "문제"
+            problem_dest_dir.mkdir(parents=True, exist_ok=True)
+
             for sb2_path in sb2_files:
                 sb2_name = Path(sb2_path).name
-                dest_path = self.submission_dir / sb2_name
+                dest_path = problem_dest_dir / sb2_name
                 if not dest_path.exists():
                     copy2(sb2_path, dest_path)
                     print(f"📄 문제 복사: {sb2_name}")
 
-            # 정답 폴더 추측: 문제 폴더 형제 폴더 중 '정답' 포함 폴더
+            # 정답 폴더 경로 추정 및 생성
             parent = Path(problem_folder).parent
             answer_folder = next(
                 (parent / d for d in os.listdir(parent) if "정답" in d),
@@ -200,10 +203,13 @@ class ExamApp(tk.Tk):
             )
 
             if answer_folder and answer_folder.exists():
+                answer_dest_dir = self.submission_dir / "정답"
+                answer_dest_dir.mkdir(parents=True, exist_ok=True)
+
                 for file in os.listdir(answer_folder):
                     if file.endswith(".sb2"):
                         src = answer_folder / file
-                        dst = self.submission_dir / file
+                        dst = answer_dest_dir / file
                         if not dst.exists():
                             copy2(src, dst)
                             print(f"📄 정답 복사: {file}")
@@ -290,10 +296,20 @@ class ExamApp(tk.Tk):
         left_group = tk.Frame(bottom_frame, bg="lightgray")
         left_group.pack(side="left")
 
-        zoom_in_btn = tk.Button(left_group, text="확대 +", command=self.zoom_in)
+        btn_style = {
+            "bg": "#007BFF",            # 파란색
+            "fg": "white",              # 흰색 글씨
+            "activebackground": "#0056b3",  # 눌렀을 때 어두운 파란색
+            "activeforeground": "white",
+            "font": ("맑은 고딕", 10, "bold"),
+            "relief": "flat",           # 테두리 평평하게 (선택 사항)
+            "width": 10                 # 버튼 너비 설정 (선택 사항)
+        }
+
+        zoom_in_btn = tk.Button(left_group, text="확대 +", command=self.zoom_in, **btn_style)
         zoom_in_btn.pack(side="left", padx=5)
 
-        zoom_out_btn = tk.Button(left_group, text="축소 -", command=self.zoom_out)
+        zoom_out_btn = tk.Button(left_group, text="축소 -", command=self.zoom_out, **btn_style)
         zoom_out_btn.pack(side="left", padx=5)
 
         self.zoom_label = tk.Label(left_group, text="100%", bg="lightgray")
@@ -314,17 +330,17 @@ class ExamApp(tk.Tk):
         right_group.pack(side="right")
 
         self.retry_btn = tk.Button(
-            right_group, text="다시 풀기", command=self.confirm_retry
+            right_group, text="다시 풀기", command=self.confirm_retry, **btn_style
         )
         self.retry_btn.pack(side="left", padx=10)
 
         self.skip_btn = tk.Button(
-            right_group, text="건너 뛰기", command=self.confirm_skip
+            right_group, text="건너 뛰기", command=self.confirm_skip, **btn_style
         )
         self.skip_btn.pack(side="left", padx=10)
 
         self.next_btn = tk.Button(
-            right_group, text="다음 문제", command=self.confirm_saved_before_submit
+            right_group, text="다음 문제", command=self.confirm_saved_before_submit, **btn_style
         )
         self.next_btn.pack(side="left", padx=10)
 
@@ -475,8 +491,15 @@ class ExamApp(tk.Tk):
         # ✅ 6. 문제 파일 복사 → Scratch 실행
         original_sb2 = self.sb2_files[page_num]
         original_name = Path(original_sb2).stem
-        dest_name = f"{original_name}_제출.sb2"
+        # dest_name = f"{original_name}_제출.sb2"
+        
+        if '_문제' in original_name:
+            dest_name = original_name.replace('_문제', '_제출') + '.sb2'
+        else:
+            dest_name = original_name + '_제출.sb2'
+
         dest_path = self.submission_dir / dest_name
+
 
         if not dest_path.exists():
             copy2(original_sb2, dest_path)

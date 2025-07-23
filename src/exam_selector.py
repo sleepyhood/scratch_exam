@@ -37,7 +37,7 @@ class ExamSelector(tk.Tk):
 
         tk.Label(self, text="시험 등급을 선택하세요").pack(pady=10)
         self.exam_type_combo = ttk.Combobox(
-            self, textvariable=self.exam_type_var, state="readonly"
+            self, textvariable=self.exam_type_var, state="readonly", font=("맑은 고딕", 10), width=30
         )
         self.exam_type_combo.pack(pady=5)
         self.exam_type_combo["values"] = self.get_exam_types()
@@ -45,17 +45,32 @@ class ExamSelector(tk.Tk):
 
         tk.Label(self, text="시험 회차를 선택하세요").pack(pady=10)
         self.exam_round_combo = ttk.Combobox(
-            self, textvariable=self.exam_round_var, state="disabled"
+            self, textvariable=self.exam_round_var, state="disabled", font=("맑은 고딕", 10), width=30
         )
         self.exam_round_combo.pack(pady=5)
 
+        btn_style = {
+            "bg": "#007BFF",            # 파란색
+            "fg": "white",              # 흰 글씨
+            "font": ("맑은 고딕", 10, "bold"),
+            "activebackground": "#0056b3",
+            "activeforeground": "white",
+            "disabledforeground": "#999999",  # 비활성 상태에서 글자색
+
+            "width": 20
+        }
+
         self.start_btn = tk.Button(
-            self, text="시험 시작", state="disabled", command=self.confirm_start
+            self, text="시험 시작", state="disabled", command=self.confirm_start, **btn_style
         )
         self.start_btn.pack(pady=20)
 
+        regrade_btn_style = btn_style.copy()
+        regrade_btn_style["bg"] = "#28a745"               # 녹색
+        regrade_btn_style["activebackground"] = "#1e7e34"
+
         self.regrade_btn = tk.Button(
-            self, text="재채점 실행", command=self.select_folder_for_regrade
+            self, text="재채점 실행", command=self.select_folder_for_regrade, **regrade_btn_style
         )
         self.regrade_btn.pack(pady=10)
 
@@ -68,6 +83,8 @@ class ExamSelector(tk.Tk):
         # self.show_exam_types()
 
         # def set_icon(self):
+
+
 
     def select_folder_for_regrade(self):
         from tkinter import filedialog
