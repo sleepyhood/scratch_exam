@@ -3,7 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <title>채점 결과 리포트</title>
+
     <style>
+      .cmd-motion {
+        color: #3b82f6;
+        font-weight: 600;
+      }
+      .cmd-looks {
+        color: #7c3aed;
+        font-weight: 600;
+      }
+      .cmd-sound {
+        color: #db2777;
+        font-weight: 600;
+      }
+      .cmd-pen {
+        color: #059669;
+        font-weight: 600;
+      }
+      .cmd-data {
+        color: #f97316;
+        font-weight: 600;
+      }
+      .cmd-events {
+        color: #d97706;
+        font-weight: 600;
+      }
+      .cmd-control {
+        color: #ca8a04;
+        font-weight: 600;
+      }
+      .cmd-sensing {
+        color: #2563eb;
+        font-weight: 600;
+      }
+      .cmd-operators {
+        color: #16a34a;
+        font-weight: 600;
+      }
+      .cmd-additional {
+        color: #7e22ce;
+        font-weight: 600;
+      }
+
       body {
         font-family: "Segoe UI", sans-serif;
         margin: 40px;
@@ -89,8 +131,8 @@
   <body>
     <h1>📝 COS 자격시험 채점 결과</h1>
     {% if regrade_count %}
-<h2>🌀 재채점 {{ regrade_count }}회차</h2>
-{% endif %}
+    <h2>🌀 재채점 {{ regrade_count }}회차</h2>
+    {% endif %}
 
     <p class="small">📅 채점일: <strong>{{ today }}</strong></p>
 

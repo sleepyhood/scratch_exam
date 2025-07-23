@@ -5,6 +5,7 @@ import zipfile
 import filecmp
 import re
 import pprint
+import html
 
 
 def interpret_block(block, depth=0):
@@ -31,58 +32,66 @@ def interpret_block(block, depth=0):
     # 변수 값 읽기
     elif opcode == "readVariable":
         var_name = block[1]
-        if var_name == "answer":
-            return "대답"
-        if var_name == "timer":
-            return "타이머"
-        else:
-            return var_name
+        return f"({var_name})"
 
     # 연산: 더하기
     elif opcode == "+":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"({left} 더하기 {right})"
+        return f"({left} + {right})"
 
     # 연산: 빼기
     elif opcode == "-":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"({left} 빼기 {right})"
+        return f"({left} - {right})"
 
     # 연산: 곱하기
     elif opcode == "*":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"({left} 곱하기 {right})"
+        return f"({left} * {right})"
 
     # 연산: 나누기
     elif opcode == "/":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"({left} 나누기 {right})"
+        return f"({left} / {right})"
 
     # 난수 생성 (min ~ max)
     elif opcode == "randomFrom:to:":
         min_val = interpret_block(block[1])
         max_val = interpret_block(block[2])
-        return f"{min_val}부터 {max_val}까지 난수 생성"
-
-    # 이동 (x, y) 방향으로 이동
-    elif opcode == "move:steps:":
-        steps = interpret_block(block[1])
-        return f"{steps}만큼 이동하기"
+        return f"({min_val}부터 {max_val}사이의 난수)"
 
     # 위치 설정
     elif opcode == "gotoX:y:":
         x = interpret_block(block[1])
         y = interpret_block(block[2])
-        return f"x 좌표 {x}, y 좌표 {y}로 이동하기"
+        return f"[x 좌표 {x}, y 좌표 {y}로 이동하기]"
 
     # 방향 설정
     elif opcode == "pointInDirection:":
         direction = interpret_block(block[1])
-        return f"방향을 {direction}도로 설정하기"
+        return f"[방향을 {direction}도로 설정하기]"
+
+    elif opcode == "xpos":
+        return "[x좌표]"
+
+    elif opcode == "ypos":
+        return "[y좌표]"
+
+    elif opcode == "doBroadcastAndWait":
+        if args:
+            return f"[신호 {args[0]} 보내고 기다리기]"
+        else:
+            return "[신호 보내고 기다리기 (신호 없음)]"
+
+    elif opcode == "broadcast:":
+        if args:
+            return f"[신호 {args[0]} 보내기]"
+        else:
+            return "[신호 보내기 (신호 없음)]"
 
     # 변수 값 증가
     elif opcode == "changeVar:by:":
@@ -101,12 +110,14 @@ def interpret_block(block, depth=0):
     # 제어: 반복 (횟수)
     elif opcode == "repeat:times:":
         times = interpret_block(block[1])
-        return f"{times}번 반복하기"
+        return f"{times}번 반복하기:"
 
     # 제어: 만약 ~ 이면
     elif opcode == "if:":
         condition = interpret_block(block[1])
-        return f"{indent}만약 {condition}이면:\n\t" + "\n".join("  " + interpret_block(b, depth+1) for b in inner_blocks)
+        return f"{indent}만약 {condition}이면:\n\t" + "\n".join(
+            {indent} + interpret_block(b, depth + 1) for b in inner_blocks
+        )
 
     # 제어: 만약 ~ 이고 아니면
     elif opcode == "if:else:":
@@ -158,7 +169,11 @@ def interpret_block(block, depth=0):
 
     # 감지: 높이 센서 값 (예시)
     elif opcode == "timer":
-        return "타이머 값"
+        return "(타이머)"
+
+    # 감지: 대답
+    elif opcode == "answer":
+        return "(대답)"
 
     # 크기 설정
     elif opcode == "setSizeTo:":
@@ -182,61 +197,94 @@ def interpret_block(block, depth=0):
         costume_name = interpret_block(block[1])
         return f"모습을 '{costume_name}'(으)로 바꾸기"
 
+    elif opcode == "nextCostume":
+        return f"다음 모양으로 바꾸기"
+
     # 무한 반복 (doForever) : 내부 블록들 리스트
     # 제일 극혐
     elif opcode == "doForever":
         if args:
             inner_blocks = args[0]
             if isinstance(inner_blocks, list):
-                inner_texts = [interpret_block(b) for b in inner_blocks]
-                inner_text = "; ".join(inner_texts)
-                return f"무한 반복하기: \n\t{inner_text}"
+                inner_texts = [
+                    interpret_block(b, depth + 1) or "" for b in inner_blocks
+                ]
+                # 들여쓰기 추가
+                inner_text = "\n".join("  " * (depth + 1) + t for t in inner_texts)
+                return f"{'  ' * depth}무한 반복하기:\n{inner_text}"
             else:
-                return "무한 반복하기 (내부 블록 없음)"
+                return f"{'  ' * depth}무한 반복하기 (내부 블록 없음)"
+        else:
+            return f"{'  ' * depth}무한 반복하기 (코드 없음)"
 
     elif opcode == "doRepeat":
         if args and len(args) >= 2 and args[1]:
             repeat_count = interpret_block(args[0])  # 반복 횟수
             inner_blocks = args[1]  # 반복 내용
-            inner_texts = [interpret_block(b) for b in inner_blocks]
+            inner_texts = [interpret_block(b) or "" for b in inner_blocks]
 
-            inner_text = "; ".join(inner_texts)
-            return f"{repeat_count}번 반복하기: \n\t{inner_text}"
+            # inner_text = "\n ".join(inner_texts)
+            inner_text = "\n".join("  " * (depth + 1) + t for t in inner_texts)
+
+            return f"{'  ' * depth}{repeat_count}번 반복하기:\n{inner_text}"
         else:
-            return "반복하기 (인자 부족)"
+            return f"{'  ' * depth}반복하기 (코드 없음)"
 
     elif opcode == "doUntil":
         if args and len(args) >= 2:
             condition = interpret_block(args[0])
             inner_blocks = args[1]
-            inner_texts = [interpret_block(b) for b in inner_blocks]
+            inner_texts = [interpret_block(b) or "" for b in inner_blocks]
 
-            inner_text = "; ".join(inner_texts)
-            return f"{condition} 될 때까지 반복하기: \n\t{inner_text}"
+            if inner_texts:
+                # inner_text = "\n\t" + "\n\t".join(inner_texts)
+                inner_text = "\n".join("  " * (depth + 1) + t for t in inner_texts)
+
+            else:
+                inner_text = "\n".join("  " * (depth + 1) + "<내용 없음>")
+
+            return f"{'  ' * depth}{condition} 될 때까지 반복하기:\n{inner_text}"
         else:
-            return "조건 반복 (인자 부족)"
+            return f"{'  ' * depth}조건 반복 (코드 없음)"
 
     elif opcode == "doIf":
         if args and len(args) >= 2:
             condition = interpret_block(args[0])
             inner_blocks = args[1]
-            inner_texts = [interpret_block(b) for b in inner_blocks]
+            inner_texts = [interpret_block(b) or "" for b in inner_blocks]
 
-            inner_text = "; ".join(inner_texts)
-            return f"만약 {condition} 이면: \n\t{inner_text}"
+            # inner_text = "\n ".join(inner_texts)
+            inner_text = "\n".join("  " * (depth + 1) + t for t in inner_texts)
+
+            return f"{'  ' * depth}만약 {condition} 라면:\n{inner_text}"
         else:
-            return "만약 조건문 (인자 부족)"
+            return f"{'  ' * depth}만약 조건문 (코드 없음)"
 
     elif opcode == "doIfElse":
         if args and len(args) >= 3:
-            condition = interpret_block(args[0])
+            condition = interpret_block(args[0], depth)
             if_block = args[1]
             else_block = args[2]
-            if_texts = [interpret_block(b) for b in flatten_blocks(if_block)]
-            else_texts = [interpret_block(b) for b in flatten_blocks(else_block)]
-            return f"만약 {condition} 이면: \n\t{'; '.join(if_texts)}\n아니면: \n\t{'; '.join(else_texts)}"
+            if_texts = [
+                interpret_block(b, depth + 1) or "" for b in flatten_blocks(if_block)
+            ]
+            else_texts = [
+                interpret_block(b, depth + 1) or "" for b in flatten_blocks(else_block)
+            ]
+
+            def add_indent(texts):
+                return "\n".join(
+                    "  " * (depth + 1) + line
+                    for text in texts
+                    for line in text.splitlines()
+                )
+
+            if_part = add_indent(if_texts)
+            else_part = add_indent(else_texts)
+
+            return f"{'  ' * depth}만약 {condition} 라면:\n{if_part}\n{'  ' * depth}아니면:\n{else_part}"
         else:
-            return "조건문 (if-else) (인자 부족)"
+            return f"{'  ' * depth}조건문 (if-else) (코드 없음)"
 
     elif opcode == "waitUntil":
         if args:
@@ -245,22 +293,26 @@ def interpret_block(block, depth=0):
         else:
             return "조건 없음: 기다리기"
 
-    elif opcode == "foreverIf":
-        if args:
-            condition = interpret_block(args[0])
-            if len(args) > 1 and args[1]:
-                inner_blocks_flat = flatten_blocks(args[1])
-                if inner_blocks_flat:
-                    inner_texts = [interpret_block(b) for b in inner_blocks_flat]
-                    inner_text = "; ".join(inner_texts)
-                    return f"{condition}인 동안 계속 반복하기: \n\t{inner_text}"
-                else:
-                    return f"{condition}인 동안 계속 반복하기 (내부 블록 없음)"
-            else:
-                return f"{condition}인 동안 계속 반복하기 (내부 블록 없음)"
-        else:
-            return "조건 없음: 무한 반복"
-        
+    # elif opcode == "foreverIf":
+    #     if args:
+    #         condition = interpret_block(args[0])
+    #         if len(args) > 1 and args[1]:
+    #             inner_blocks_flat = flatten_blocks(args[1])
+    #             if inner_blocks_flat:
+    #                 inner_texts = [interpret_block(b) or "" for b in inner_blocks_flat]
+    #                 # inner_text = "\n ".join(inner_texts)
+    #                 inner_text = "\n".join("  " * (depth + 1) + t for t in inner_texts)
+
+    #                 return f"{'  ' * depth}{condition}인 동안 계속 반복하기:\n{inner_text}"
+    #             else:
+    #                 return f"{'  ' * depth}{condition}인 동안 계속 반복하기 (내부 블록 없음)"
+    #         else:
+    #             return (
+    #                 f"{'  ' * depth}{condition}인 동안 계속 반복하기 (내부 블록 없음)"
+    #             )
+    #     else:
+    #         return f"{'  ' * depth}조건 없음: 무한 반복"
+
     # 논리 연산: AND
     elif opcode == "&":
         left = interpret_block(block[1])
@@ -282,13 +334,13 @@ def interpret_block(block, depth=0):
     elif opcode == ">":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"[{left} > {right}]"
+        return f"[{left}이 {right}보다 크다]"
 
     # 비교 연산: 작다
     elif opcode == "<":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"[{left} < {right}]"
+        return f"[{left} 이 {right}보다 작다]"
 
     # 리스트에 값 추가
     elif opcode == "append:toList:":
@@ -305,24 +357,24 @@ def interpret_block(block, depth=0):
     elif opcode == "getLine:ofList:":
         index = interpret_block(block[1])
         lst = interpret_block(block[2])
-        return f"[{lst}의 {index}번째 줄]"
+        return f"({lst}의 {index}번째 줄)"
 
     # 사용자 입력값 또는 파라미터 획득
     elif opcode == "getParam":
         param_type = interpret_block(block[1])
         param_name = interpret_block(block[2])
-        return f"{param_name}"   
+        return f"{param_name}"
 
     # 논리 연산: NOT
     elif opcode == "not":
         operand = interpret_block(block[1])
-        return f"[{operand}이(가) 아니다]"
+        return f"({operand}이(가) 아니다)"
 
     # 산술 연산: 나머지 (%)
     elif opcode == "%":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"[{left} 나누기 {right}의 나머지]"
+        return f"({left} 나누기 {right}의 나머지)"
 
     # 회전: 왼쪽으로 돌리기
     elif opcode == "turnLeft:":
@@ -332,25 +384,26 @@ def interpret_block(block, depth=0):
     # 이동: 앞으로 이동
     elif opcode == "forward:":
         steps = interpret_block(block[1])
-        return f"[{steps} 만큼 움직이기]"
+        return f"[({steps}) 만큼 움직이기]"
+        # return span(f"{steps} 만큼 움직이기", "cmd-motion")
 
     # r: 입력값 or 랜덤값 의미할 수 있음 — 단순히 표현
     elif opcode == "r":
         param = interpret_block(block[1])
-        return f"[{param} 매개변수]"  
+        return f"{param} 매개변수"
 
     # 형 변환 등 기본 처리
     else:
         # 리스트 내 모든 원소를 재귀 처리 후 문자열로 합치기
         if isinstance(block, list):
-            return "[" + ", ".join(interpret_block(b) for b in block) + "]"
+            return "[" + ", ".join(interpret_block(b) or "" for b in block) + "]"
         return str(block)
 
 
 def flatten_blocks(blocks):
     if not isinstance(blocks, list):
         return []
-    
+
     flattened = []
     for b in blocks:
         if isinstance(b, list):
@@ -359,6 +412,7 @@ def flatten_blocks(blocks):
         else:
             flattened.append(b)
     return flattened
+
 
 def blocks_are_equivalent(b1, b2):
     # 예: changeVar:by: vs setVar:to: + readVariable
@@ -446,13 +500,14 @@ def costumes_are_equivalent(c1, c2):
 #             return path or "root"
 #         return None
 
+
 # 모든 에러 보여주기
 def find_all_diff_elements(a, b, path=""):
     """
     두 값이나 리스트를 비교해 모든 차이 위치를 리스트로 반환.
     """
     diffs = []
-    
+
     if type(a) != type(b):
         diffs.append(path or "root")
         return diffs
@@ -470,27 +525,41 @@ def find_all_diff_elements(a, b, path=""):
 
     return diffs
 
+
 def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
     diff_messages = []
 
-    for script_idx, (exp_blocks, act_blocks) in enumerate(zip(expected_scripts, actual_scripts)):
+    for script_idx, (exp_blocks, act_blocks) in enumerate(
+        zip(expected_scripts, actual_scripts)
+    ):
         for block_idx, (b_exp, b_act) in enumerate(zip(exp_blocks, act_blocks)):
             if not blocks_are_equivalent(b_exp, b_act):
                 diff_positions = find_all_diff_elements(b_exp, b_act)
                 diff_pos_str = ", ".join(diff_positions)
+
+                exp_str = html.escape(interpret_block(b_exp))
+                act_str = html.escape(interpret_block(b_act))
+
+                # 색상이 바꿀거면 이스케이프 안하기
+                # 근데 매줄마다 스타일 바꿔줘야함...
+                # exp_str = interpret_block(b_exp)
+                # act_str = interpret_block(b_act)
+                print(f"act_str: {act_str}")
+
                 diff_msg = (
                     f"<div style='margin-bottom: 1em;'>"
                     f"<strong>🎯 '{sprite_name}' 스프라이트 스크립트 {script_idx + 1}번 블록 {block_idx} 오류</strong><br>"
                     f"차이 위치: <code>{diff_pos_str}</code><br><br>"
                     f"<strong>✅ 정답:</strong><br>"
-                    f"<pre style='background:#c8e6c9;padding:8px;border-radius:5px;'>{interpret_block(b_act)}</pre>"
+                    f"<pre style='background:#c8e6c9;padding:8px;border-radius:5px;'>{act_str}</pre>"
                     f"<strong>❌ 제출:</strong><br>"
-                    f"<pre style='background:#ffcdd2;padding:8px;border-radius:5px;'>{interpret_block(b_exp)}</pre>"
+                    f"<pre style='background:#ffcdd2;padding:8px;border-radius:5px; '>{exp_str}</pre>"
                     f"</div>"
                 )
                 diff_messages.append(diff_msg)
 
     return "<hr>".join(diff_messages) if diff_messages else ""
+
 
 def compare_normalized_projects(s_project, a_project):
     errors = []
@@ -664,7 +733,9 @@ def grade_from_meta(meta_path):
 
         try:
             s_json = extract_json_from_sb2(submit_file)
+            print(f"s_json: {s_json}")
             a_json = extract_json_from_sb2(matched_answer)
+            print(f"a_json: {a_json}")
 
         except Exception as e:
             results.append({"오류내용": f"[project.json 추출 실패] {e}"})
@@ -681,7 +752,7 @@ def grade_from_meta(meta_path):
             continue
 
         try:
-            pp = pprint.PrettyPrinter(indent=2, width=120, compact=False)
+            # pp = pprint.PrettyPrinter(indent=2, width=120, compact=False)
             # pp.pprint(s_normalized)
 
             # pp.pprint(a_normalized)
