@@ -19,8 +19,8 @@ class ExamSelector(tk.Tk):
         self.submission_meta_path = None  # ✅ 제출본 경로 저장용
 
         # 창 크기
-        window_width = 400
-        window_height = 500
+        window_width = 480
+        window_height = 620
 
         # 화면 해상도 기준 중앙 위치 계산
         screen_width = self.winfo_screenwidth()
@@ -35,24 +35,45 @@ class ExamSelector(tk.Tk):
         self.exam_type_var = tk.StringVar()
         self.exam_round_var = tk.StringVar()
 
-        tk.Label(self, text="시험 등급을 선택하세요").pack(pady=10)
-        self.exam_type_combo = ttk.Combobox(
-            self, textvariable=self.exam_type_var, state="readonly", font=("맑은 고딕", 10), width=30
-        )
-        self.exam_type_combo.pack(pady=5)
-        self.exam_type_combo["values"] = self.get_exam_types()
-        self.exam_type_combo.bind("<<ComboboxSelected>>", self.update_exam_rounds)
+        tk.Label(self, text="시험 등급을 선택하세요", font=("맑은 고딕", 13, "bold")).pack(pady=10)
 
-        tk.Label(self, text="시험 회차를 선택하세요").pack(pady=10)
+        self.exam_type_var = tk.StringVar()
+        self.exam_type_frame = tk.Frame(self)
+        self.exam_type_frame.pack()
+
+        for exam_type in self.get_exam_types():
+            rb = tk.Radiobutton(
+                self.exam_type_frame,
+                text=exam_type,
+                variable=self.exam_type_var,
+                value=exam_type,
+                font=("맑은 고딕", 13),
+                indicatoron=False,  # ✅ 원 대신 버튼처럼 표시
+                width=25,
+                padx=10,
+                pady=5,
+                relief="raised",
+                bd=2,
+                selectcolor="#cce5ff",  # 선택되었을 때 배경
+                command=self.update_exam_rounds,
+            )
+            rb.pack(anchor="w", pady=3)
+
+
+        tk.Label(self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")).pack(pady=10)
+        
+        style.configure("Custom.TCombobox",
+                font=("맑은 고딕", 13),          # 입력창 폰트
+                padding=5)
         self.exam_round_combo = ttk.Combobox(
-            self, textvariable=self.exam_round_var, state="disabled", font=("맑은 고딕", 10), width=30
+            self, textvariable=self.exam_round_var, state="disabled", font=("맑은 고딕", 12), width=30
         )
         self.exam_round_combo.pack(pady=5)
 
         btn_style = {
             "bg": "#007BFF",            # 파란색
             "fg": "white",              # 흰 글씨
-            "font": ("맑은 고딕", 10, "bold"),
+            "font": ("맑은 고딕", 11, "bold"),  # ✅ 폰트 크기 ↑
             "activebackground": "#0056b3",
             "activeforeground": "white",
             "disabledforeground": "#999999",  # 비활성 상태에서 글자색
@@ -61,7 +82,8 @@ class ExamSelector(tk.Tk):
         }
 
         self.start_btn = tk.Button(
-            self, text="시험 시작", state="disabled", command=self.confirm_start, **btn_style
+            self, text="시험 시작", state="disabled", command=self.confirm_start, **btn_style,    cursor="hand2",  # 👈 마우스 오버 시 손모양
+
         )
         self.start_btn.pack(pady=20)
 
@@ -166,6 +188,8 @@ class ExamSelector(tk.Tk):
                     text=folder,
                     width=30,
                     command=lambda f=folder_path: self.start_exam(f),
+                    
+                    font=("맑은 고딕", 13),
                 )
                 btn.pack(pady=5)
 

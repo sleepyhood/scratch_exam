@@ -323,7 +323,7 @@ def interpret_block(block, depth=0):
     elif opcode == "=":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"[{left} = {right}]"
+        return f"[{left} 와 {right} 같다]"
 
     # 문자열 길이
     elif opcode == "stringLength:":
