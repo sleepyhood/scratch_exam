@@ -15,7 +15,7 @@ class ExamSelector(tk.Tk):
         super().__init__()
         self.base_path = base_path
         print(f"ExamSelector self.base_path: {self.base_path}")
-        
+
         self.submission_meta_path = None  # ✅ 제출본 경로 저장용
 
         # 창 크기
@@ -35,7 +35,9 @@ class ExamSelector(tk.Tk):
         self.exam_type_var = tk.StringVar()
         self.exam_round_var = tk.StringVar()
 
-        tk.Label(self, text="시험 등급을 선택하세요", font=("맑은 고딕", 13, "bold")).pack(pady=10)
+        tk.Label(
+            self, text="시험 등급을 선택하세요", font=("맑은 고딕", 13, "bold")
+        ).pack(pady=10)
 
         self.exam_type_var = tk.StringVar()
         self.exam_type_frame = tk.Frame(self)
@@ -59,40 +61,51 @@ class ExamSelector(tk.Tk):
             )
             rb.pack(anchor="w", pady=3)
 
+        tk.Label(
+            self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")
+        ).pack(pady=10)
 
-        tk.Label(self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")).pack(pady=10)
-        
-        style.configure("Custom.TCombobox",
-                font=("맑은 고딕", 13),          # 입력창 폰트
-                padding=5)
+        style.configure(
+            "Custom.TCombobox", font=("맑은 고딕", 13), padding=5  # 입력창 폰트
+        )
         self.exam_round_combo = ttk.Combobox(
-            self, textvariable=self.exam_round_var, state="disabled", font=("맑은 고딕", 12), width=30
+            self,
+            textvariable=self.exam_round_var,
+            state="disabled",
+            font=("맑은 고딕", 12),
+            width=30,
         )
         self.exam_round_combo.pack(pady=5)
 
         btn_style = {
-            "bg": "#007BFF",            # 파란색
-            "fg": "white",              # 흰 글씨
+            "bg": "#007BFF",  # 파란색
+            "fg": "white",  # 흰 글씨
             "font": ("맑은 고딕", 11, "bold"),  # ✅ 폰트 크기 ↑
             "activebackground": "#0056b3",
             "activeforeground": "white",
             "disabledforeground": "#999999",  # 비활성 상태에서 글자색
-
-            "width": 20
+            "width": 20,
         }
 
         self.start_btn = tk.Button(
-            self, text="시험 시작", state="disabled", command=self.confirm_start, **btn_style,    cursor="hand2",  # 👈 마우스 오버 시 손모양
-
+            self,
+            text="시험 시작",
+            state="disabled",
+            command=self.confirm_start,
+            **btn_style,
+            cursor="hand2",  # 👈 마우스 오버 시 손모양
         )
         self.start_btn.pack(pady=20)
 
         regrade_btn_style = btn_style.copy()
-        regrade_btn_style["bg"] = "#28a745"               # 녹색
+        regrade_btn_style["bg"] = "#28a745"  # 녹색
         regrade_btn_style["activebackground"] = "#1e7e34"
 
         self.regrade_btn = tk.Button(
-            self, text="재채점 실행", command=self.select_folder_for_regrade, **regrade_btn_style
+            self,
+            text="재채점 실행",
+            command=self.select_folder_for_regrade,
+            **regrade_btn_style,
         )
         self.regrade_btn.pack(pady=10)
 
@@ -105,8 +118,6 @@ class ExamSelector(tk.Tk):
         # self.show_exam_types()
 
         # def set_icon(self):
-
-
 
     def select_folder_for_regrade(self):
         from tkinter import filedialog
@@ -121,7 +132,6 @@ class ExamSelector(tk.Tk):
             messagebox.showinfo("완료", "재채점이 완료되었습니다.")
         except Exception as e:
             messagebox.showerror("오류", f"재채점 중 오류 발생: {e}")
-
 
     def get_exam_types(self):
         return [
@@ -163,8 +173,6 @@ class ExamSelector(tk.Tk):
         self.label.config(text="시험 등급을 선택하세요")
         self.clear_widgets()
 
-        
-
         for folder in os.listdir(self.base_path):
             folder_path = os.path.join(self.base_path, folder)
             if os.path.isdir(folder_path):
@@ -188,7 +196,6 @@ class ExamSelector(tk.Tk):
                     text=folder,
                     width=30,
                     command=lambda f=folder_path: self.start_exam(f),
-                    
                     font=("맑은 고딕", 13),
                 )
                 btn.pack(pady=5)
