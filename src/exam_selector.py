@@ -65,9 +65,9 @@ class ExamSelector(tk.Tk):
             self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")
         ).pack(pady=10)
 
-        style.configure(
-            "Custom.TCombobox", font=("맑은 고딕", 13), padding=5  # 입력창 폰트
-        )
+        # style.configure(
+        #     "Custom.TCombobox", font=("맑은 고딕", 13), padding=5  # 입력창 폰트
+        # )
         self.exam_round_combo = ttk.Combobox(
             self,
             textvariable=self.exam_round_var,
