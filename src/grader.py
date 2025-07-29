@@ -140,7 +140,8 @@ def find_all_diff_elements(a, b, path=""):
 
 def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
     diff_messages = []
-
+    # print(f"expected_scripts: {expected_scripts}\n\n\n\n")
+    # print(f"actual_scripts: {actual_scripts}\n\n\n")
     for script_idx, (exp_blocks, act_blocks) in enumerate(
         zip(expected_scripts, actual_scripts)
     ):
