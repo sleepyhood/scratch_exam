@@ -139,49 +139,83 @@ def find_all_diff_elements(a, b, path=""):
 
 
 def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
-    diff_messages = []
-    # print(f"expected_scripts: {expected_scripts}\n\n\n\n")
-    # print(f"actual_scripts: {actual_scripts}\n\n\n")
+    diff_rows = []
     for script_idx, (exp_blocks, act_blocks) in enumerate(
         zip(expected_scripts, actual_scripts)
     ):
         for block_idx, (b_exp, b_act) in enumerate(zip(exp_blocks, act_blocks)):
             if not blocks_are_equivalent(b_exp, b_act):
                 diff_positions = find_all_diff_elements(b_exp, b_act)
-                diff_pos_str = ", ".join(diff_positions)
+                parsed_paths = parse_paths(diff_positions)
 
-                # exp_str = html.escape(interpret_block(b_exp))
-                # act_str = html.escape(interpret_block(b_act))
+                exp_str = interpret_block(b_exp, highlight_paths=parsed_paths)
+                act_str = interpret_block(b_act, highlight_paths=parsed_paths)
 
-                # 색상이 바꿀거면 이스케이프 안하기
-                # 근데 매줄마다 스타일 바꿔줘야함...
-                # exp_str = interpret_block(b_exp)
-                # act_str = interpret_block(b_act)
+                block_html = f"""
+<br/><p><strong>🎯 '{sprite_name}' 스크립트 {script_idx + 1}번 블록 {block_idx} 오류</strong></p>
+<p>차이 위치: <code>{", ".join(diff_positions)}</code></p>
+<table class="diff-table">
+  <thead>
+    <tr><th>✅ 정답</th><th>❌ 제출</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><div class='block-display correct'>{act_str}</div></td>
+      <td><div class='block-display wrong'>{exp_str}</div></td>
+    </tr>
+  </tbody>
+</table>
+"""
+                diff_rows.append(block_html)
 
-                # exp_str = interpret_block(b_exp, highlight_paths=diff_positions)
-                # act_str = interpret_block(b_act, highlight_paths=diff_positions)
-                exp_str = interpret_block(
-                    b_exp, highlight_paths=parse_paths(diff_positions)
-                )
-                act_str = interpret_block(
-                    b_act, highlight_paths=parse_paths(diff_positions)
-                )
-                print(f"diff_positions: {diff_positions}")
-                print(f"act_str: {act_str}")
+    return "<hr>".join(diff_rows)
 
-                diff_msg = (
-                    f"<div style='margin-bottom: 1em;'>"
-                    f"<strong>🎯 '{sprite_name}' 스프라이트 스크립트 {script_idx + 1}번 블록 {block_idx} 오류</strong><br>"
-                    f"차이 위치: <code>{diff_pos_str}</code><br><br>"
-                    f"<strong>✅ 정답:</strong><br>"
-                    f"<div class='block-display correct'>{act_str}</div>"
-                    f"<strong>❌ 제출:</strong><br>"
-                    f"<div class='block-display wrong'>{exp_str}</div>"
-                    f"</div>"
-                )
-                diff_messages.append(diff_msg)
 
-    return "<hr>".join(diff_messages) if diff_messages else ""
+# def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
+#     diff_messages = []
+#     print(f"expected_scripts: {expected_scripts}\n\n\n\n")
+#     print(f"actual_scripts: {actual_scripts}\n\n\n")
+#     for script_idx, (exp_blocks, act_blocks) in enumerate(
+#         zip(expected_scripts, actual_scripts)
+#     ):
+#         for block_idx, (b_exp, b_act) in enumerate(zip(exp_blocks, act_blocks)):
+#             print(f"block_idx: {block_idx}")
+#             if not blocks_are_equivalent(b_exp, b_act):
+#                 diff_positions = find_all_diff_elements(b_exp, b_act)
+#                 diff_pos_str = ", ".join(diff_positions)
+
+#                 # exp_str = html.escape(interpret_block(b_exp))
+#                 # act_str = html.escape(interpret_block(b_act))
+
+#                 # 색상이 바꿀거면 이스케이프 안하기
+#                 # 근데 매줄마다 스타일 바꿔줘야함...
+#                 # exp_str = interpret_block(b_exp)
+#                 # act_str = interpret_block(b_act)
+
+#                 # exp_str = interpret_block(b_exp, highlight_paths=diff_positions)
+#                 # act_str = interpret_block(b_act, highlight_paths=diff_positions)
+#                 exp_str = interpret_block(
+#                     b_exp, highlight_paths=parse_paths(diff_positions)
+#                 )
+#                 act_str = interpret_block(
+#                     b_act, highlight_paths=parse_paths(diff_positions)
+#                 )
+#                 print(f"diff_positions: {diff_positions}")
+#                 # print(f"act_str: {act_str}")
+
+#                 diff_msg = (
+#                     f"<div style='margin-bottom: 1em;'>"
+#                     f"<br/><strong>🎯 '{sprite_name}' 스프라이트 스크립트 {script_idx + 1}번 블록 {block_idx} 오류</strong><br>"
+#                     f"차이 위치: <code>{diff_pos_str}</code><br><br>"
+#                     f"<strong>✅ 정답:</strong><br>"
+#                     f"<div class='block-display correct'>{act_str}</div><br/>"
+#                     f"<strong>❌ 제출:</strong><br>"
+#                     f"<div class='block-display wrong'>{exp_str}</div>"
+#                     f"</div>"
+#                 )
+#                 diff_messages.append(diff_msg)
+
+#     return "<hr>".join(diff_messages) if diff_messages else ""
 
 
 def compare_normalized_projects(s_project, a_project):

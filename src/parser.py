@@ -16,6 +16,8 @@ BLOCK_CLASS_MAP = {
     "gotoSpriteOrMouse:": "cmd-motion",
     "bounceOffEdge": "cmd-motion",
     "setRotationStyle": "cmd-motion",
+    "glideSecs:toX:y:elapsed:from:": "cmd-motion",
+    "pointTowards:": "cmd-motion",
     #
     # 형태
     "nextCostume": "cmd-looks",
@@ -25,6 +27,12 @@ BLOCK_CLASS_MAP = {
     "say:": "cmd-looks",
     "think:duration:elapsed:from:": "cmd-looks",
     "think:": "cmd-looks",
+    "show": "cmd-looks",
+    "hide": "cmd-looks",
+    "scale": "cmd-looks",
+    "sceneName": "cmd-looks",
+    "changeSizeBy:": "cmd-looks",
+    "goBackByLayers:": "cmd-looks",
     #
     # 소리
     "playSound:": "cmd-sound",
@@ -33,6 +41,7 @@ BLOCK_CLASS_MAP = {
     "broadcast:": "cmd-events",
     "doBroadcastAndWait": "cmd-events",
     "whenSensorGreaterThan": "cmd-events",
+    "whenCloned": "cmd-events",
     #
     # 제어
     "doForever": "cmd-control",
@@ -40,6 +49,9 @@ BLOCK_CLASS_MAP = {
     "doIfElse": "cmd-control",
     "wait:elapsed:from:": "cmd-control",
     "doWaitUntil": "cmd-control",
+    "stopScripts": "cmd-control",
+    "deleteClone": "cmd-control",
+    "createCloneOf": "cmd-control",
     #
     # 연산
     "+": "cmd-operators",
@@ -52,6 +64,12 @@ BLOCK_CLASS_MAP = {
     ">": "cmd-operators",
     "&": "cmd-operators",
     "|": "cmd-operators",
+    "not": "cmd-operators",
+    "stringLength:": "cmd-operators",
+    "letter:of:": "cmd-operators",
+    "concatenate:with:": "cmd-operators",
+    "rounded": "cmd-operators",
+    "computeFunction:of:": "cmd-operators",
     #
     # 감지
     "mousePressed": "cmd-sensing",
@@ -64,10 +82,32 @@ BLOCK_CLASS_MAP = {
     "distanceTo:": "cmd-sensing",
     "getUserName": "cmd-sensing",
     "timestamp": "cmd-sensing",
+    "mouseX": "cmd-sensing",
+    "mouseY": "cmd-sensing",
+    "setVideoState": "cmd-sensing",
+    "getAttribute:of:": "cmd-sensing",
+    "timeAndDate": "cmd-sensing",
     #
-    # 변수
+    # 데이터 - 변수
     "setVar:to:": "cmd-data",
     "readVariable": "cmd-data",
+    "changeVar:by:": "cmd-data",
+    "showVariable:": "cmd-data",
+    "hideVariable:": "cmd-data",
+    #
+    # 데이터 - 리스트
+    "append:toList:": "cmd-list",
+    "deleteLine:ofList:": "cmd-list",
+    "insert:at:ofList:": "cmd-list",
+    "showList:": "cmd-list",
+    "hideList:": "cmd-list",
+    "setLine:ofList:to:": "cmd-list",
+    "lineCountOfList:": "cmd-list",
+    "list:contains:": "cmd-list",
+    #
+    # 추가 블록
+    "call": "cmd-additional",
+    "getParam": "cmd-additional",
     # 필요시 더 추가
 }
 
@@ -283,6 +323,26 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         set_type = block[1]
         return f"<span class='{css_class}'>회전 방식을 {set_type}로 정하기</span><br/>"
 
+    elif opcode == "glideSecs:toX:y:elapsed:from:":
+        duration = interpret_block(block[1])
+        x = interpret_block(block[2])
+        y = interpret_block(block[3])
+
+        duration_disp = highlight_if_constant(duration, block[1])
+        x_disp = highlight_if_constant(x, block[2])
+        y_disp = highlight_if_constant(y, block[3])
+
+        return f"<span class='{css_class}'>{duration_disp} 초 동안 x: {x_disp} y: {y_disp} 으로 이동하기</span><br/>"
+
+    elif opcode == "pointTowards:":
+        destination = interpret_block(block[1])
+        destination = (
+            "마우스 포인터"
+            if destination == "_mouse_"
+            else "랜덤 위치" if destination == "_random_" else destination
+        )
+        return f"<span class='{css_class}'>{destination} 쪽 보기</span><br/>"
+
     elif opcode == "doBroadcastAndWait":
         if args:
             return f"<span class='{css_class}'>{args[0]} 방송하고 기다리기</span><br/>"
@@ -299,12 +359,21 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
 
     # 변수 값 증가
     elif opcode == "changeVar:by:":
+
         var_name = block[1]
         delta_raw = block[2]
         delta = interpret_block(block[2])
 
         delta_disp = highlight_if_constant(delta, delta_raw)
         return f"<span class='{css_class}'>{var_name}를 {delta_disp}만큼 바꾸기</span><br/>"
+
+    elif opcode == "showVariable:":
+        value = block[1]
+        return f"<span class='{css_class}'>{value} 변수 보이기</span><br/>"
+
+    elif opcode == "hideVariable:":
+        value = block[1]
+        return f"<span class='{css_class}'>{value} 변수 숨기기</span><br/>"
 
     # 이벤트: 시작했을 때
     elif opcode == "whenGreenFlag":
@@ -322,6 +391,10 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         value_raw_disp = highlight_if_constant(value, value_raw)
 
         return f"<span class='block roof-block'>{event_type} > {value_raw_disp} 일 때</span><br/>"
+
+    # 이벤트: 복제되었을 때
+    elif opcode == "whenCloned":
+        return f"<span class='block roof-block'>복제되었을 때</span><br/>"
 
     # 제어: 만약 ~ 이면
     # elif opcode == "if:":
@@ -353,6 +426,19 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         condition = interpret_block(block[1])
         return f"<span class='{css_class}'>{condition} 까지 기다리기</span><br/>"
 
+    elif opcode == "stopScripts":
+        option = block[1]
+        option_disp = (
+            "이 스크립트"
+            if option == "this script"
+            else (
+                "스프라이트에 있는 다른 스크립트"
+                if option == "other scripts in sprite"
+                else "모두"
+            )
+        )
+        return f"<span class='{css_class}'>{option_disp} 멈추기</span><br/>"
+
     # 감지: 키 눌림 체크
     elif opcode == "keyPressed:":
         key = interpret_block(block[1])
@@ -363,6 +449,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
 
     elif opcode == "distanceTo:":
         destination = block[1]
+        destination = "마우스 포인터" if destination == "_mouse_" else destination
         return f"<span class='{css_class}'>{destination}까지의 거리</span>"
 
     elif opcode == "getUserName":
@@ -373,11 +460,27 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
 
     # 감지: 마우스 위치 X
     elif opcode == "mouseX":
-        return "마우스 X 위치"
+        return f"<span class='{css_class}'>마우스의 X좌표</span>"
 
     # 감지: 마우스 위치 Y
     elif opcode == "mouseY":
-        return "마우스 Y 위치"
+        return f"<span class='{css_class}'>마우스의 y좌표</span>"
+
+    elif opcode == "setVideoState":
+        state = block[1]
+
+        return f"<span class='{css_class}'>비디오 {"켜기 " if state == "on" else "끄기"}</span>"
+
+    elif opcode == "getAttribute:of:":
+        option = block[1]
+        option = (
+            "x좌표"
+            if option == "x position"
+            else "y좌펴" if option == "y position" else option
+        )
+        sprite = interpret_block(block[2])
+
+        return f"<span class='{css_class}'>{option} of {sprite}</span>"
 
     # 감지: 스프라이트에 닿았는지?
     elif opcode == "touching:":
@@ -457,7 +560,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         sentence_disp = highlight_if_constant(sentence, block[1])
         duration_disp = highlight_if_constant(duration, block[2])
 
-        return f"<span class='{css_class}'>{sentence_disp}을(를) {duration_disp}초동안 생각하기</span><br/>"
+        return f"<span class='{css_class}'>{sentence_disp} 을(를) {duration_disp}초동안 생각하기</span><br/>"
 
     elif opcode == "think:":
         sentence = interpret_block(block[1])
@@ -481,6 +584,11 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         sentence_disp = highlight_if_constant(sentence, block[1])
 
         return f"<span class='{css_class}'>{sentence_disp} 말하기</span><br/>"
+
+    elif opcode == "show":
+        return f"<span class='{css_class}'>보이기</span><br/>"
+    elif opcode == "hide":
+        return f"<span class='{css_class}'>보이기</span><br/>"
     ############################
 
     elif opcode == "doForever":
@@ -498,7 +606,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
                     f"{'  ' * (depth + 1)}<div class='block-body'>\n"
                     f"{inner_html}\n"
                     f"{'  ' * (depth + 1)}</div>\n"
-                    f"{'  ' * depth}</div>"
+                    f"{'  ' * depth}</div><br/>"
                 )
             else:
                 return f"{'  ' * depth}<span class='cmd-control'>무한 반복하기 (내부 블록 없음)</span>"
@@ -523,7 +631,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
                 f"{'  ' * (depth + 1)}<div class='block-body'>\n"
                 f"{inner_text}\n"
                 f"{'  ' * (depth + 1)}</div>\n"
-                f"{'  ' * depth}</div>"
+                f"{'  ' * depth}</div><br/>"
             )
 
         else:
@@ -548,7 +656,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
                 f"{'  ' * (depth + 1)}<div class='block-body'>\n"
                 f"{inner_text}\n"
                 f"{'  ' * (depth + 1)}</div>\n"
-                f"{'  ' * depth}</div>"
+                f"{'  ' * depth}</div><br/>"
             )
         else:
             return f"{'  ' * depth}조건 반복 (코드 없음)"
@@ -568,7 +676,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
                 f"{'  ' * (depth + 1)}<div class='block-body'>\n"
                 f"{inner_text}\n"
                 f"{'  ' * (depth + 1)}</div>\n"
-                f"{'  ' * depth}</div>"
+                f"{'  ' * depth}</div><br/>"
                 # f"{'  ' * depth}<span class='{css_class}'>만약 {condition} 라면:</span>\n{inner_text}"
             )
 
@@ -608,7 +716,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
                 f"{'  ' * (depth + 1)}<div class='block-body'>\n"
                 f"{else_part}\n"
                 f"{'  ' * (depth + 1)}</div>\n"
-                f"{'  ' * depth}</div>"
+                f"{'  ' * depth}</div><br/>"
             )
         else:
             return f"{'  ' * depth}조건문 (if-else) (코드 없음)"
@@ -619,6 +727,14 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
             return f"{condition}이(가) 참이 될 때까지 기다리기"
         else:
             return "조건 없음: 기다리기"
+
+    elif opcode == "createCloneOf":
+        target = interpret_block(block[1])
+        target = "나 자신" if target == "_myself_" else target
+        return f"<span class='{css_class}'>{target} 복제하기<span><br/>"
+
+    elif opcode == "deleteClone":
+        return f"<span class='{css_class}'>이 복제본 삭제하기<span><br/>"
 
     # 논리 연산: AND
     elif opcode == "&":
@@ -667,7 +783,50 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         target = interpret_block(block[1])
         target_disp = highlight_if_constant(target, target_raw)
 
-        return f"[{target_disp}의 길이]"
+        return f"<span class='{css_class}'>{target_disp}의 길이</span>"
+
+    elif opcode == "letter:of:":
+        idx = interpret_block(block[1])
+        sentence = interpret_block(block[2])
+        idx_disp = highlight_if_constant(idx, block[1])
+        sentence_disp = highlight_if_constant(sentence, block[2])
+
+        return (
+            f"<span class='{css_class}'>{idx_disp}번째 글자 ( {sentence_disp} )</span>"
+        )
+
+    elif opcode == "concatenate:with:":
+        str1 = interpret_block(block[1])
+        str2 = interpret_block(block[2])
+
+        str1_disp = highlight_if_constant(str1, block[1])
+        str2_disp = highlight_if_constant(str2, block[2])
+
+        return f"<span class='{css_class}'>{str1_disp} 와 {str2_disp} 결합하기</span>"
+
+    elif opcode == "rounded":
+        value = interpret_block(block[1])
+        value_disp = highlight_if_constant(value, block[1])
+        return f"<span class='{css_class}'>{value_disp} 반올림</span>"
+
+    elif opcode == "computeFunction:of:":
+        oper = interpret_block(block[1])
+        value = interpret_block(block[2])
+        oper = (
+            "제곱근"
+            if oper == "sqrt"
+            else (
+                "바닥 함수"
+                if oper == "floor"
+                else (
+                    "천장 함수"
+                    if oper == "ceil"
+                    else "절대값" if oper == "abs" else oper
+                )
+            )
+        )
+        value_disp = highlight_if_constant(value, block[2])
+        return f"<span class='{css_class}'>{oper} ({value_disp})</span>"
 
     # 비교 연산: 크다
     elif opcode == ">":
@@ -700,39 +859,131 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         print(f"left_disp:_{left_disp}")
         return f"<span class='{css_class}'>{left_disp} < {right_disp}</span>"
 
+    # 리스트
+    elif opcode == "showList:":
+        lst = block[1]
+        return f"<span class='{css_class}'>{lst} 리스트 보이기</span><br/>"
+
+    elif opcode == "hideList:":
+        lst = block[1]
+        return f"<span class='{css_class}'>{lst} 리스트 숨기기</span><br/>"
+
     # 리스트에 값 추가
     elif opcode == "append:toList:":
         item = interpret_block(block[1])
+        item_disp = highlight_if_constant(item, block[1])
         lst = interpret_block(block[2])
-        return f"[{lst}에 {item} 추가]"
+        return f"<span class='{css_class}'>{item_disp} 항목을 {lst} 에 추가하기</span><br/>"
+
+    # 리스트 삽입
+    elif opcode == "insert:at:ofList:":
+        item = interpret_block(block[1])
+        item_disp = highlight_if_constant(item, block[1])
+
+        option = interpret_block(block[2])
+        option_disp = highlight_if_constant(option, block[2])
+        option_disp = (
+            "마지막"
+            if option_disp == "last"
+            else "랜덤" if option_disp == "random" else option_disp
+        )
+        lst = interpret_block(block[3])
+        return f"<span class='{css_class}'>{item_disp} 을(를) {option_disp} 번째 {lst} 에 넣기</span><br/>"
+
+    # 리스트 변경
+    elif opcode == "setLine:ofList:to:":
+        option = interpret_block(block[1])
+        option_disp = highlight_if_constant(option, block[1])
+        option_disp = (
+            "마지막"
+            if option_disp == "last"
+            else "랜덤" if option_disp == "random" else option_disp
+        )
+
+        lst = interpret_block(block[2])
+
+        item = interpret_block(block[3])
+        item_disp = highlight_if_constant(item, block[3])
+
+        return f"<span class='{css_class}'>{option_disp} 번째 {lst} 의 항목을 {item_disp} (으)로 바꾸기</span><br/>"
+
+    # 리스트 지우기
+    elif opcode == "deleteLine:ofList:":
+        option = interpret_block(block[1])
+        option_disp = highlight_if_constant(option, block[1])
+        option_disp = (
+            "마지막"
+            if option_disp == "last"
+            else "모두" if option_disp == "all" else option_disp
+        )
+        lst = interpret_block(block[2])
+        return f"<span class='{css_class}'>{option_disp} 번째 항목을 {lst} 에서 삭제하기</span><br/>"
 
     # 리스트 줄 수 세기
     elif opcode == "lineCountOfList:":
         lst = interpret_block(block[1])
-        return f"[{lst}의 줄 수]"
+        return f"<span class='{css_class}'>{lst} 리스트의 항목 수</span>"
 
-    # 리스트에서 특정 줄 가져오기
-    elif opcode == "getLine:ofList:":
-        index = interpret_block(block[1])
-        lst = interpret_block(block[2])
-        return f"({lst}의 {index}번째 줄)"
+    # 리스트 포함 여부
+    elif opcode == "list:contains:":
+        lst = interpret_block(block[1])
+        item = interpret_block(block[2])
+        item_disp = highlight_if_constant(item, block[2])
+        return (
+            f"<span class='{css_class}'>{lst} 리스트에 {item_disp} 포함되었는가?</span>"
+        )
 
     # 사용자 입력값 또는 파라미터 획득
+    # ['getParam', 'Num', 'r']
     elif opcode == "getParam":
-        param_type = interpret_block(block[1])
-        param_name = interpret_block(block[2])
-        return f"{param_name}"
+        param_name = interpret_block(block[1])
+        return f"<span class='{css_class}'>{param_name}</span>"
+
+    # 추가 블럭 정의
+    elif opcode == "call":
+        parameters = list(block[1].split())
+        name = parameters[0]
+
+        if len(parameters) == 1:
+            return f"<span class='{css_class}'>{name}</span><br/>"
+
+        tmp = ""
+        for i in range(2, len(block)):
+            t = interpret_block(block[i])
+            t_disp = highlight_if_constant(t, block[1])
+            tmp += t_disp
+
+        return f"<span class='{css_class}'>{name} {tmp}</span><br/>"
+
+        # tmp = ""
+        # for i in range(1, len(parameters)):
+        #     print(f"parameters: {parameters[i]}")
+        #     if parameters[i] == "%s" or parameters[i] == "%n" or parameters[i] == "%b":
+        #         t = interpret_block(parameters[i])
+        #         t_disp = highlight_if_color(t, parameters[i])
+        #         tmp += t_disp
+
+        #     else:
+        #         tmp += parameters[i]
+
+        #     tmp += " "
 
     # 논리 연산: NOT
     elif opcode == "not":
         operand = interpret_block(block[1])
-        return f"({operand}이(가) 아니다)"
+        return f"<span class='{css_class}'>{operand}이(가) 아니다</span>"
 
     # 산술 연산: 나머지 (%)
     elif opcode == "%":
         left = interpret_block(block[1])
         right = interpret_block(block[2])
-        return f"<span class='{css_class}'>({left} 나누기 {right}의 나머지)</span>"
+
+        left_disp = highlight_if_constant(left, block[1])
+        right_disp = highlight_if_constant(right, block[2])
+
+        return (
+            f"<span class='{css_class}'>{left_disp} 나누기 {right_disp}의 나머지</span>"
+        )
 
     # 회전: 왼쪽으로 돌리기
     elif opcode == "turnLeft:":
@@ -763,19 +1014,19 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
 
     elif opcode == "gotoSpriteOrMouse:":
         destination = interpret_block(block[1])
+        destination = (
+            "마우스 포인터"
+            if destination == "_mouse_"
+            else "랜덤 위치" if destination == "_random_" else destination
+        )
         return f"<span class='{css_class}'>{destination} 위치로 이동하기</span><br/>"
-
-    # r: 입력값 or 랜덤값 의미할 수 있음 — 단순히 표현
-    elif opcode == "r":
-        param = interpret_block(block[1])
-        return f"{param} 매개변수"
 
     # 형 변환 등 기본 처리
     else:
         # 리스트 내 모든 원소를 재귀 처리 후 문자열로 합치기
         if isinstance(block, list):
-            return "[" + ", ".join(interpret_block(b) or "" for b in block) + "]"
-        return str(block)
+            return "[" + ", ".join(interpret_block(b) or "" for b in block) + "]<br/>"
+        return f"{str(block)}<br/>"
 
 
 def flatten_blocks(blocks):

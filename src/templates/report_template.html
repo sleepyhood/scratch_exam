@@ -15,12 +15,18 @@
         font-weight: 600;
         color: white;
         font-family: "Noto Sans KR", sans-serif;
-        box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+        /*box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);*/
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); /* 좀 더 플랫하고 현대적인 느낌 */
+
         white-space: pre-wrap;
       }
-
+      /*[class^="cmd-"]:hover {
+        scale: 1.1;
+        transition: all 1s;
+      }*/
       .block-display {
-        padding: 8px;
+        text-align: center;
+        padding: 0.5em;
         border-radius: 6px;
         font-family: "Noto Sans KR", sans-serif;
         line-height: 1.6;
@@ -34,9 +40,9 @@
       .block-display.wrong {
         background-color: #ffcdd2;
       }
-
       .block-wrapper {
-        display: block;
+        text-align: left;
+        display: inline-block; /* 💡 핵심: block → inline-block */
         border-radius: 12px;
         padding: 6px;
         margin: 2px 0;
@@ -45,6 +51,8 @@
         box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
         font-weight: bold;
         font-family: "Noto Sans KR", sans-serif;
+        white-space: normal; /* 💡 너무 길면 줄바꿈 허용 */
+        vertical-align: top; /* 다른 인라인 요소와 정렬 안정화 */
       }
 
       .block-header {
@@ -53,10 +61,11 @@
       }
 
       .block-body {
-        background: rgba(255, 255, 255, 0.15); /* 내부 블럭 배경 약간 다르게 */
+        background: rgba(255, 255, 255, 0.15);
         border-radius: 8px;
         padding: 6px;
         margin-left: 6px;
+        display: block;
       }
 
       .block-error {
@@ -74,6 +83,7 @@
         margin: 1px 5px;
         display: inline-block;
         min-width: 15px;
+        min-height: 15px;
         text-align: center;
       }
       .color-box {
@@ -96,34 +106,45 @@
         font-weight: bold;
         color: white;
       }
-
       .cmd-motion {
-        background: #3b82f6;
+        background: #4c97ff; /* or keep #3b82f6 if you're happy */
       }
+
       .cmd-looks {
-        background: #7c3aed;
+        background: #8b5cf6;
       }
+
       .cmd-sound {
-        color: #db2777;
+        background: #db2777;
       }
+
       .cmd-pen {
-        background: #059669;
+        background: #00b295;
       }
+
       .cmd-data {
-        background: #f97316;
+        background: #ff8c1a;
+      }
+      .cmd-list {
+        background: #ff661a;
       }
       .cmd-events {
-        background: #ffbf00;
+        background: #facc15;
+        color: black; /* 노란 계열은 흰 글씨보다 검은 글씨가 더 잘 보여 */
       }
+
       .cmd-control {
-        background: #ca8a04;
+        background: #f59e0b;
       }
+
       .cmd-sensing {
-        background: #1aacc9ff;
+        background: #0ea5e9;
       }
+
       .cmd-operators {
-        background: #16a34a;
+        background: #22c55e;
       }
+
       .cmd-additional {
         background: #7e22ce;
       }
@@ -208,10 +229,47 @@
         color: orange;
         margin-right: 4px;
       }
+
+      .toggle-error {
+        background-color: #4b5563;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 0.85em;
+        border-radius: 8px;
+        margin-bottom: 4px;
+      }
+
+      .error-detail {
+        margin-top: 8px;
+        padding: 6px;
+        background: #f3f4f6;
+        border-radius: 6px;
+      }
+
+      .diff-table {
+        width: 90%;
+        margin-left: auto;
+        margin-right: auto;
+        border-collapse: collapse;
+        margin-top: 0.5em;
+      }
+
+      .diff-table th,
+      .diff-table td {
+        vertical-align: top;
+        padding: 0.5em;
+        border: 1px solid #ccc;
+      }
+      .error-detail-row td {
+        background-color: #fff8e1;
+      }
     </style>
   </head>
   <body>
     <h1>📝 COS 자격시험 채점 결과</h1>
+
     {% if regrade_count %}
     <h2>🌀 재채점 {{ regrade_count }}회차</h2>
     {% endif %}
@@ -227,11 +285,12 @@
     <table>
       <thead>
         <tr>
-          <th>문제 PDF</th>
+          <!-- PDF 열 제거 or 유지 시 -->
+          <!-- <th>문제 PDF</th> -->
           <th>제출</th>
           <th>정답여부</th>
           <th>풀이시간(초)</th>
-          <th>오류내용</th>
+          <th>오류</th>
         </tr>
       </thead>
       <tbody>
@@ -239,26 +298,34 @@
         <tr
           class="{% if r.정답여부 == 'O' %}correct{% elif r.정답여부 == 'X' %}wrong{% else %}error{% endif %}"
         >
-          <td>
-            {% if r.문제PDF %}
-            <a href="{{ r.문제PDF }}" target="_blank">보기</a>
-            {% else %} - {% endif %}
-          </td>
           <td>{{ r.제출 }}</td>
           <td class="{{ r.정답여부 }}">{{ r.정답여부 }}</td>
           <td>{{ r.풀이시간 }}</td>
           <td>
             {% if r.오류내용 %}
-            <ul>
-              {% for item in r.오류내용.split("; ") %}
-              <li>{{ item }}</li>
-              {% endfor %}
-            </ul>
+            <button class="toggle-error" onclick="toggleDetail(this)">
+              오류 보기 🔍
+            </button>
             {% else %} - {% endif %}
           </td>
         </tr>
-        {% endfor %}
+
+        {% if r.오류내용 %}
+        <tr class="error-detail-row" style="display: none">
+          <td colspan="4">{{ r.오류내용 | safe }}</td>
+        </tr>
+        {% endif %} {% endfor %}
       </tbody>
     </table>
+    <script>
+      function toggleDetail(button) {
+        const row = button.closest("tr").nextElementSibling;
+        if (!row || !row.classList.contains("error-detail-row")) return;
+
+        const visible = row.style.display === "table-row";
+        row.style.display = visible ? "none" : "table-row";
+        button.textContent = visible ? "오류 보기 🔍" : "오류 닫기 🔒";
+      }
+    </script>
   </body>
 </html>
