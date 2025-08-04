@@ -1041,3 +1041,4 @@ def flatten_blocks(blocks):
         else:
             flattened.append(b)
     return flattened
+ # type: ignore

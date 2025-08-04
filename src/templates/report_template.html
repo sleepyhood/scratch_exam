@@ -265,6 +265,36 @@
       .error-detail-row td {
         background-color: #fff8e1;
       }
+      .progress-container {
+        width: 100%;
+        background-color: #f1f5f9;
+        border-radius: 16px;
+        height: 26px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+      .progress-bar {
+        height: 100%;
+        width: 0;
+
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 8px;
+        transition: width 1.2s ease-in-out;
+        position: relative;
+        font-weight: bold;
+        color: #fff;
+      }
+
+      .progress-label {
+        position: relative;
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>
@@ -278,8 +308,18 @@
 
     <div class="summary-box">
       총 <strong>{{ results|length }}</strong>문제 중
-      <strong style="color: green">{{ correct_count }}</strong>개 정답<br />
-      ⏱ 총 풀이 시간: <strong>{{ total_time_str }} </strong>
+      <strong style="color: green">{{ correct_count }}</strong>개 정답 (<strong
+        >{{ '%0.1f' % (correct_count / results|length * 100) }}%</strong
+      >)
+
+      <p></p>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar">
+          <span class="progress-label" id="progressLabel">0%</span>
+        </div>
+      </div>
+      <p />
+      <p>⏱ 총 풀이 시간: <strong>{{ total_time_str }}</strong></p>
     </div>
 
     <table>
@@ -318,14 +358,53 @@
       </tbody>
     </table>
     <script>
-      function toggleDetail(button) {
-        const row = button.closest("tr").nextElementSibling;
-        if (!row || !row.classList.contains("error-detail-row")) return;
+          window.addEventListener('DOMContentLoaded', () => {
+        const bar = document.getElementById('progressBar');
+        const label = document.getElementById('progressLabel');
 
-        const visible = row.style.display === "table-row";
-        row.style.display = visible ? "none" : "table-row";
-        button.textContent = visible ? "오류 보기 🔍" : "오류 닫기 🔒";
-      }
+        const percentage = Math.round({{ (correct_count / results|length * 100) | round(0, 'floor') }});
+        bar.style.width = percentage + '%';
+
+        let current = 0;
+        const target = percentage;
+
+        // 애니메이션 카운터
+        const interval = setInterval(() => {
+          if (current >= target) {
+            clearInterval(interval);
+          } else {
+            current++;
+            label.textContent = current + '%';
+          }
+        }, target > 0 ? 1000 / target : 30); // 0일 경우 대비
+
+        // 색상 그라디언트 적용
+        let gradient = "";
+
+        if (target === 100)
+          gradient = "linear-gradient(to right, rgb(142,234,220), rgb(46,147,248))";
+        else if (target >= 80)
+          gradient = "linear-gradient(to right, rgb(128,240,131), rgb(44,206,190))";
+        else if (target >= 51)
+          gradient = "linear-gradient(to right, rgb(219,234,134), rgb(50,214,58))";
+        else if (target >= 21)
+          gradient = "linear-gradient(to right, rgb(236,219,135), rgb(245,151,35))";
+        else if (target >= 1)
+          gradient = "linear-gradient(to right, rgb(236,167,184), rgb(241,53,35))";
+        else
+          gradient = "gray";
+
+        bar.style.background = gradient;
+      });
+
+                          function toggleDetail(button) {
+                            const row = button.closest("tr").nextElementSibling;
+                            if (!row || !row.classList.contains("error-detail-row")) return;
+
+                            const visible = row.style.display === "table-row";
+                            row.style.display = visible ? "none" : "table-row";
+                            button.textContent = visible ? "오류 보기 🔍" : "오류 닫기 🔒";
+                          }
     </script>
   </body>
 </html>

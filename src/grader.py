@@ -7,7 +7,7 @@ import re
 import pprint
 import html
 
-from parser import interpret_block
+from scratch_parser import interpret_block
 
 import re
 
