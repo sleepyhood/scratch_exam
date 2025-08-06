@@ -33,6 +33,7 @@ BLOCK_CLASS_MAP = {
     "sceneName": "cmd-looks",
     "changeSizeBy:": "cmd-looks",
     "goBackByLayers:": "cmd-looks",
+    "comrToFront":  "cmd-looks",
     #
     # 소리
     "playSound:": "cmd-sound",
@@ -158,6 +159,10 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         # if is_path_highlighted(current_path, highlight_paths):
         #     return f"<span class='block-error'>{block}</span>"
         return str(block)
+
+    # ✅ 빈 리스트 방어
+    if not block:
+        return "[빈 블록]"
 
     opcode = block[0]
     # print(f"highlight_paths: {highlight_paths}\n")
@@ -382,6 +387,15 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     # 이벤트: 스프라이트 클릭했을 때
     elif opcode == "whenClicked":
         return f"<span class='block roof-block'>이 스프라이트가 클릭될 때</span><br/>"
+    
+    elif opcode == "whenIReceive":
+        value = block[1]
+        return f"<span class='block roof-block'>{value} 을(를) 받았을 때</span><br/>"
+    
+    elif opcode == "whenKeyPressed":
+        value = block[1]
+        return f"<span class='block roof-block'>{value} 키를 눌렀을 때</span><br/>"
+        
 
     # 이벤트: 볼륨 > 10
     elif opcode == "whenSensorGreaterThan":
@@ -469,7 +483,8 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     elif opcode == "setVideoState":
         state = block[1]
 
-        return f"<span class='{css_class}'>비디오 {"켜기 " if state == "on" else "끄기"}</span>"
+# 왜 안됨???
+        # return f"<span class='{css_class}'>비디오 {"켜기" if state == "on" else "끄기"}</span>"
 
     elif opcode == "getAttribute:of:":
         option = block[1]
@@ -485,6 +500,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     # 감지: 스프라이트에 닿았는지?
     elif opcode == "touching:":
         target = interpret_block(block[1])
+        target = "벽" if target == "_edge_" else target
         return f"<span class='{css_class}'>{target}에 닿았는가?</span>"
 
     # 감지: 색깔 감지
@@ -588,7 +604,11 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     elif opcode == "show":
         return f"<span class='{css_class}'>보이기</span><br/>"
     elif opcode == "hide":
-        return f"<span class='{css_class}'>보이기</span><br/>"
+        return f"<span class='{css_class}'>숨기기</span><br/>"
+    elif opcode == "scale":
+        return f"<span class='{css_class}'>크기</span><br/>"
+    elif opcode == "comrToFront":
+        return f"<span class='{css_class}'>맨 앞으로 순서 바꾸기</span><br/>"
     ############################
 
     elif opcode == "doForever":

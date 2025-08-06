@@ -8,6 +8,7 @@ import pprint
 import html
 
 from scratch_parser import interpret_block
+import traceback
 
 import re
 
@@ -229,7 +230,7 @@ def compare_normalized_projects(s_project, a_project):
 
     for name in sorted(all_names):
         # "보기블럭"은 채점에서 제외
-        if name.replace(" ", "") in ["보기블럭", "보기블록"]:
+        if name.replace(" ", "") in ["보기블럭", "보기블록", "보기블록1", "보기블록2", "보기블록3", "보기블록4"]:
             continue
 
         s = s_sprites.get(name)
@@ -440,13 +441,15 @@ def grade_from_meta(meta_path):
                     }
                 )
         except Exception as e:
+            tb = traceback.format_exc()
+
             results.append(
                 {
                     "제출": submit_file.name,
                     "제출파일경로": str(submit_file),  # ✅ 여기 추가
                     "정답": matched_answer.name,
                     "정답여부": "오류",
-                    "오류내용": f"[normalize or compare 중 오류] {e}",
+                    "오류내용": f"[normalize or compare 중 오류] {e}\n{tb}",
                     "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
                 }
             )
