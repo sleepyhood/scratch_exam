@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from tkinter import messagebox
+import traceback
 
 
 class ExamSelector(tk.Tk):
@@ -131,7 +132,8 @@ class ExamSelector(tk.Tk):
             regrade_submission_folder(folder)
             messagebox.showinfo("완료", "재채점이 완료되었습니다.")
         except Exception as e:
-            messagebox.showerror("오류", f"재채점 중 오류 발생: {e}")
+            tb = traceback.format_exc()
+            messagebox.showerror("오류", f"재채점 중 오류 발생: {e}\n{tb}")
 
     def get_exam_types(self):
         return [

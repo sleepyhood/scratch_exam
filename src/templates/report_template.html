@@ -308,9 +308,10 @@
 
     <div class="summary-box">
       총 <strong>{{ results|length }}</strong>문제 중
-      <strong style="color: green">{{ correct_count }}</strong>개 정답 (<strong
+      <strong style="color: green">{{ correct_count }}</strong>개 정답 {% if
+      results|length %} (<strong
         >{{ '%0.1f' % (correct_count / results|length * 100) }}%</strong
-      >)
+      >) {% endif %}
 
       <p></p>
       <div class="progress-container">
@@ -321,6 +322,11 @@
       <p />
       <p>⏱ 총 풀이 시간: <strong>{{ total_time_str }}</strong></p>
     </div>
+
+    <i style="color: #555"
+      >※ 로직이 맞다면 정답으로 인정합니다. 만약 채점오류일 경우, 해당 번호를
+      체크하세요.</i
+    >
 
     <table>
       <thead>

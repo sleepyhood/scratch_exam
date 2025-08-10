@@ -58,6 +58,7 @@ def scripts_are_equivalent(scripts1, scripts2):
     return True
 
 
+# 병렬로 작동하는 코드의 순서를 비교하는 에러가 생겼음
 def clean_scripts(scripts):
     def clean_block(block):
         if isinstance(block, list):
@@ -67,8 +68,10 @@ def clean_scripts(scripts):
     if not scripts:
         return []
 
-    # 좌표 제거
-    return [clean_block(blocks) for _, _, blocks in scripts]
+    # 좌표 제거 후, 블록 순서를 문자열 기준으로 정렬
+    cleaned = [clean_block(blocks) for _, _, blocks in scripts]
+    cleaned_sorted = sorted(cleaned, key=lambda b: str(b))
+    return cleaned_sorted
 
 
 IGNORE_COSTUME_IMAGE = True  # True면 baseLayerMD5 무시, False면 정확히 비교
@@ -230,7 +233,14 @@ def compare_normalized_projects(s_project, a_project):
 
     for name in sorted(all_names):
         # "보기블럭"은 채점에서 제외
-        if name.replace(" ", "") in ["보기블럭", "보기블록", "보기블록1", "보기블록2", "보기블록3", "보기블록4"]:
+        if name.replace(" ", "") in [
+            "보기블럭",
+            "보기블록",
+            "보기블록1",
+            "보기블록2",
+            "보기블록3",
+            "보기블록4",
+        ]:
             continue
 
         s = s_sprites.get(name)
@@ -284,7 +294,21 @@ def extract_json_from_sb2(sb2_path):
             return json.load(f)
 
 
-def normalize_project_json(project_json):
+def normalize_project_json(project_json, ignore_costume_image=True):
+    def clean_scripts(scripts):
+        def clean_block(block):
+            if isinstance(block, list):
+                return [clean_block(b) for b in block if b is not None]
+            return block if block is not None else "__EMPTY__"
+
+        if not scripts:
+            return []
+
+        # 좌표 제거 + 블록 내용만 추출
+        cleaned = [clean_block(blocks) for _, _, blocks in scripts]
+        # 순서 무시를 위해 정렬
+        return sorted(cleaned, key=lambda x: str(x))
+
     def extract_essential_sprite(sprite):
         return {
             "objName": sprite.get("objName"),
@@ -293,10 +317,15 @@ def normalize_project_json(project_json):
                 [
                     {
                         "costumeName": c.get("costumeName", "") or "",
-                        # "baseLayerMD5": c.get("baseLayerMD5", "") or "",
+                        **(
+                            {}
+                            if ignore_costume_image
+                            else {"baseLayerMD5": c.get("baseLayerMD5", "") or ""}
+                        ),
                     }
                     for c in sprite.get("costumes", [])
-                    if c.get("costumeName") and c.get("baseLayerMD5")
+                    if c.get("costumeName")
+                    and (ignore_costume_image or c.get("baseLayerMD5"))
                 ],
                 key=lambda x: x.get("costumeName") or "",
             ),
@@ -310,7 +339,6 @@ def normalize_project_json(project_json):
             ),
         }
 
-    # Stage
     children = project_json.get("children", [])
     normalized_children = sorted(
         [
@@ -327,10 +355,15 @@ def normalize_project_json(project_json):
                 [
                     {
                         "costumeName": c.get("costumeName", "") or "",
-                        "baseLayerMD5": c.get("baseLayerMD5", "") or "",
+                        **(
+                            {}
+                            if ignore_costume_image
+                            else {"baseLayerMD5": c.get("baseLayerMD5", "") or ""}
+                        ),
                     }
                     for c in project_json.get("costumes", [])
-                    if c.get("costumeName") and c.get("baseLayerMD5")
+                    if c.get("costumeName")
+                    and (ignore_costume_image or c.get("baseLayerMD5"))
                 ],
                 key=lambda x: x.get("costumeName") or "",
             ),
@@ -430,6 +463,7 @@ def grade_from_meta(meta_path):
                 # 차이점 수집
                 diff_errors = compare_normalized_projects(s_normalized, a_normalized)
                 print(f"diff_errors: {diff_errors}")
+                tmp = str(s_normalized) + "\n\n" + str(a_normalized)
                 results.append(
                     {
                         "제출": submit_file.name,

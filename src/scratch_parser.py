@@ -33,7 +33,7 @@ BLOCK_CLASS_MAP = {
     "sceneName": "cmd-looks",
     "changeSizeBy:": "cmd-looks",
     "goBackByLayers:": "cmd-looks",
-    "comrToFront":  "cmd-looks",
+    "comrToFront": "cmd-looks",
     #
     # 소리
     "playSound:": "cmd-sound",
@@ -71,6 +71,7 @@ BLOCK_CLASS_MAP = {
     "concatenate:with:": "cmd-operators",
     "rounded": "cmd-operators",
     "computeFunction:of:": "cmd-operators",
+    "randomFrom:to:": "cmd-operators",
     #
     # 감지
     "mousePressed": "cmd-sensing",
@@ -387,15 +388,14 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     # 이벤트: 스프라이트 클릭했을 때
     elif opcode == "whenClicked":
         return f"<span class='block roof-block'>이 스프라이트가 클릭될 때</span><br/>"
-    
+
     elif opcode == "whenIReceive":
         value = block[1]
         return f"<span class='block roof-block'>{value} 을(를) 받았을 때</span><br/>"
-    
+
     elif opcode == "whenKeyPressed":
         value = block[1]
         return f"<span class='block roof-block'>{value} 키를 눌렀을 때</span><br/>"
-        
 
     # 이벤트: 볼륨 > 10
     elif opcode == "whenSensorGreaterThan":
@@ -483,8 +483,8 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     elif opcode == "setVideoState":
         state = block[1]
 
-# 왜 안됨???
-        # return f"<span class='{css_class}'>비디오 {"켜기" if state == "on" else "끄기"}</span>"
+    # 왜 안됨???
+    # return f"<span class='{css_class}'>비디오 {"켜기" if state == "on" else "끄기"}</span>"
 
     elif opcode == "getAttribute:of:":
         option = block[1]
@@ -1061,4 +1061,6 @@ def flatten_blocks(blocks):
         else:
             flattened.append(b)
     return flattened
- # type: ignore
+
+
+# type: ignore
