@@ -10,6 +10,7 @@ from datetime import datetime
 from tkinter import messagebox
 import traceback
 
+from itertools import count
 
 class ExamSelector(tk.Tk):
     def __init__(self, base_path):
@@ -275,9 +276,21 @@ class ExamSelector(tk.Tk):
         self.user_home = Path.home()
         today = datetime.now().strftime("%Y%m%d")
 
-        self.folder_name = f"{username}_{exam_round_name}_{today}"
-        self.submission_dir = self.user_home / "Desktop" / self.folder_name
-        self.submission_dir.mkdir(parents=True, exist_ok=True)
+
+
+        base_folder_name = f"{username}_{exam_round_name}_{today}"
+        submission_dir = self.user_home / "Desktop" / base_folder_name
+
+        for i in count(1):
+            if not submission_dir.exists():
+                break
+            submission_dir = self.user_home / "Desktop" / f"{base_folder_name}_{i}"
+
+        self.folder_name = submission_dir.name
+        self.submission_dir = submission_dir
+        self.submission_dir.mkdir(parents=True, exist_ok=False)
+
+
 
         self.submission_meta_path = self.submission_dir / "meta.json"
 

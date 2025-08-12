@@ -229,7 +229,21 @@
         color: orange;
         margin-right: 4px;
       }
+    button {
+  background-color: #4b5563;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.85em;
+  border-radius: 6px;
+  margin-top: 6px;
+  transition: background-color 0.2s ease;
+}
 
+button:hover {
+  background-color: #374151;
+}
       .toggle-error {
         background-color: #4b5563;
         color: white;
@@ -271,7 +285,7 @@
         border-radius: 16px;
         height: 26px;
         position: relative;
-        overflow: hidden;
+        overflow: visible; /* ✅ 아우라 보이게 */
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
       }
 
@@ -295,6 +309,54 @@
         font-size: 0.9rem;
         white-space: nowrap;
       }
+
+
+#pdf-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0,0,0,0.3);
+  z-index: 999;
+}
+
+#pdf-viewer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: #f9f9f9;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+}
+.progress-bar.aura {
+  animation: bluePulse 1.8s ease-in-out infinite;
+  position: relative;
+  z-index: 10;
+  color: rgb(255, 217, 0);
+  font-weight: bold;
+}
+
+@keyframes bluePulse {
+  0% {
+    box-shadow:
+      0 0 12px rgba(0, 178, 255, 0.4),
+      0 0 20px rgba(124, 204, 255, 0.3),
+      0 0 28px rgba(156, 102, 255, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 20px rgba(0, 178, 255, 0.7),
+      0 0 32px rgba(124, 204, 255, 0.5),
+      0 0 40px rgba(156, 102, 255, 0.4);
+  }
+  100% {
+    box-shadow:
+      0 0 12px rgba(0, 178, 255, 0.4),
+      0 0 20px rgba(124, 204, 255, 0.3),
+      0 0 28px rgba(156, 102, 255, 0.3);
+  }
+}
+
+
     </style>
   </head>
   <body>
@@ -328,42 +390,76 @@
       체크하세요.</i
     >
 
-    <table>
-      <thead>
-        <tr>
-          <!-- PDF 열 제거 or 유지 시 -->
-          <!-- <th>문제 PDF</th> -->
-          <th>제출</th>
-          <th>정답여부</th>
-          <th>풀이시간(초)</th>
-          <th>오류</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in results %}
-        <tr
-          class="{% if r.정답여부 == 'O' %}correct{% elif r.정답여부 == 'X' %}wrong{% else %}error{% endif %}"
-        >
-          <td>{{ r.제출 }}</td>
-          <td class="{{ r.정답여부 }}">{{ r.정답여부 }}</td>
-          <td>{{ r.풀이시간 }}</td>
-          <td>
-            {% if r.오류내용 %}
-            <button class="toggle-error" onclick="toggleDetail(this)">
-              오류 보기 🔍
-            </button>
-            {% else %} - {% endif %}
-          </td>
-        </tr>
-
+<table>
+  <thead>
+    <tr>
+      <th>제출</th>
+      <th>정답여부</th>
+      <th>풀이시간(초)</th>
+      <th>오류</th>
+      <th>문제</th>  <!-- 문제 버튼 위치 이동 -->
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr class="{% if r.정답여부 == 'O' %}correct{% elif r.정답여부 == 'X' %}wrong{% else %}error{% endif %}">
+      <td>{{ r.제출 }}</td>
+      <td class="{{ r.정답여부 }}">{{ r.정답여부 }}</td>
+      <td>{{ r.풀이시간 }}</td>
+      <td>
         {% if r.오류내용 %}
-        <tr class="error-detail-row" style="display: none">
-          <td colspan="4">{{ r.오류내용 | safe }}</td>
-        </tr>
-        {% endif %} {% endfor %}
-      </tbody>
-    </table>
+        <button class="toggle-error" onclick="toggleDetail(this)">🔍 오류 보기</button>
+        {% else %}-{% endif %}
+      </td>
+      <td>
+        {% if r.문제PDF %}
+        <button onclick='showPdf({{ r.문제PDF | tojson }}, {{ r.시작페이지 | default(1) }})'>📄 문제 보기</button>
+        {% else %}-{% endif %}
+      </td>
+    </tr>
+
+    {% if r.오류내용 %}
+    <tr class="error-detail-row" style="display: none">
+      <td colspan="5">{{ r.오류내용 | safe }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+
+
+<!-- PDF 슬라이드 뷰어 패널 -->
+<!-- PDF Viewer Wrapper -->
+<div id="pdf-overlay" style="display: none">
+  <div id="pdf-viewer">
+    <iframe id="pdf-frame" style="width: 100%; height: 100%; border: none"></iframe>
+  </div>
+</div>
+
     <script>
+function showPdf(pdfPath, page) {
+  const overlay = document.getElementById("pdf-overlay");
+  const frame = document.getElementById("pdf-frame");
+
+  const pageSuffix = `#page=${page || 1}`;
+  frame.src = pdfPath + pageSuffix;
+
+  overlay.style.display = "block";
+}
+
+document.getElementById("pdf-overlay").addEventListener("click", function (e) {
+  // 클릭한 곳이 iframe이 아닌 바깥이면 닫기
+  if (e.target.id === "pdf-overlay") {
+    this.style.display = "none";
+    document.getElementById("pdf-frame").src = "";
+  }
+});
+function hidePdf() {
+  document.getElementById('pdf-viewer').style.left = '-60%';
+}
+
+
           window.addEventListener('DOMContentLoaded', () => {
         const bar = document.getElementById('progressBar');
         const label = document.getElementById('progressLabel');
@@ -387,8 +483,10 @@
         // 색상 그라디언트 적용
         let gradient = "";
 
-        if (target === 100)
-          gradient = "linear-gradient(to right, rgb(142,234,220), rgb(46,147,248))";
+ if (target === 100) {
+  gradient = "linear-gradient(to right, rgb(142,234,220), rgb(46,147,248))";
+  bar.classList.add("aura");
+}
         else if (target >= 80)
           gradient = "linear-gradient(to right, rgb(128,240,131), rgb(44,206,190))";
         else if (target >= 51)
@@ -412,5 +510,8 @@
                             button.textContent = visible ? "오류 보기 🔍" : "오류 닫기 🔒";
                           }
     </script>
+
+
+
   </body>
 </html>

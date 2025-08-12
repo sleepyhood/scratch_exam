@@ -66,13 +66,14 @@ def save_results_as_html(results, meta_path=None, regrade_mode=False, output_fil
         regrade_count = None
 
     output_path = desktop / filename
-
+    print(f"output_path: {output_path}")
     html = template.render(
         results=results,
         correct_count=correct_count,
         today=today,
         total_time_str=format_time(total_time),
         regrade_count=regrade_count,
+        
     )
 
     with open(output_path, "w", encoding="utf-8") as f:

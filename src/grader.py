@@ -11,7 +11,8 @@ from scratch_parser import interpret_block
 import traceback
 
 import re
-
+from urllib.parse import quote
+from pathlib import Path
 
 def parse_paths(paths):
     parsed = []
@@ -396,13 +397,21 @@ def grade_from_meta(meta_path):
 
     results = []
 
-    for submit_file in submission_dir.glob("*_제출.sb2"):
+    for i, submit_file in enumerate(submission_dir.glob("*_제출.sb2")):
         base = normalize_name(submit_file.stem)
 
         # PDF 찾기
-        pdf_path = submit_file.with_name(submit_file.stem.replace("_제출", "") + ".pdf")
-        pdf_rel_path = pdf_path.name if pdf_path.exists() else None
+        # raw_path = meta.get("pdf_path")
+        raw_path_list = list(submission_dir.glob("*.pdf"))
+        pdf_full_path = None
 
+        if raw_path_list:
+            # 첫 번째 PDF 선택
+            first_pdf_path = raw_path_list[0].resolve()  # Path 객체
+            cleaned = str(first_pdf_path).replace("\\", "/")  # 문자열로 바꾼 후 슬래시 정리
+            pdf_full_path = "file:///" + cleaned  # 세 개 슬래시 주의!
+            print(f"pdf_full_path: {pdf_full_path}")
+        # print(f"pdf_rel_path//pdf_rel_path}")
         # 정답 후보 찾기
         matched_answer = None
         for ans_file in answer_dir.glob("*.sb2"):
@@ -456,7 +465,9 @@ def grade_from_meta(meta_path):
                         "제출파일경로": str(submit_file),  # ✅ 여기 추가
                         "정답": matched_answer.name,
                         "정답여부": "O",
-                        "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
+                        "문제PDF": pdf_full_path ,  # 🔍 추가된 항목
+                            "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+
                     }
                 )
             else:
@@ -471,7 +482,9 @@ def grade_from_meta(meta_path):
                         "정답": matched_answer.name,
                         "정답여부": "X",
                         "오류내용": "; ".join(diff_errors),
-                        "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
+                        "문제PDF": pdf_full_path ,  # 🔍 추가된 항목
+                            "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+
                     }
                 )
         except Exception as e:
@@ -484,7 +497,9 @@ def grade_from_meta(meta_path):
                     "정답": matched_answer.name,
                     "정답여부": "오류",
                     "오류내용": f"[normalize or compare 중 오류] {e}\n{tb}",
-                    "문제PDF": pdf_rel_path,  # 🔍 추가된 항목
+                    "문제PDF": pdf_full_path,  # 🔍 추가된 항목
+                        "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+
                 }
             )
 

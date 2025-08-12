@@ -106,6 +106,7 @@ BLOCK_CLASS_MAP = {
     "setLine:ofList:to:": "cmd-list",
     "lineCountOfList:": "cmd-list",
     "list:contains:": "cmd-list",
+    "getLine:ofList:": "cmd-list",
     #
     # 추가 블록
     "call": "cmd-additional",
@@ -952,6 +953,16 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         return (
             f"<span class='{css_class}'>{lst} 리스트에 {item_disp} 포함되었는가?</span>"
         )
+
+    elif opcode == "getLine:ofList:":
+        item = interpret_block(block[1])
+        item_disp = highlight_if_constant(item, block[1])
+        lst= interpret_block(block[2]) 
+
+        return (
+            f"<span class='{css_class}'>{lst} 리스트의 {item}번째 항목</span>"
+        )
+
 
     # 사용자 입력값 또는 파라미터 획득
     # ['getParam', 'Num', 'r']
