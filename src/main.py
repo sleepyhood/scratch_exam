@@ -1,10 +1,10 @@
 from exam_selector import ExamSelector
 from loading_json import load_config
-from pathlib import Path
 from html_report import save_results_as_html
 import traceback
 from tkinter import Tk, filedialog
 from markupsafe import Markup
+from pathlib import Path
 
 
 

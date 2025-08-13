@@ -11,6 +11,166 @@ from tkinter import messagebox
 import traceback
 
 from itertools import count
+# (파일 상단 import 근처에 추가)
+from tkinter import filedialog  # ✅ 전역 import
+import uuid, socket, zipfile, shutil  # ✅ 번들 전송에 사용
+
+from loading_json import load_config
+from pathlib import Path
+from typing import Optional
+
+
+
+# 사용 예시
+# 어딘가에서 ExamSelector 만들 때:
+config = load_config()
+default_exam_folder = Path(config["default_exam_folder_toDCT2"])
+report_inbox = config.get("report_inbox", r"\\DCT2\Desktop\DCT2_공유폴더\ExamReports\incoming")
+
+
+# ✅ config 저장 헬퍼 (외부 save_config 없을 때도 동작하도록)
+def _fallback_save_config_to_userfile(cfg: dict):
+    try:
+        p = Path.home() / ".scratch_exam_config.json"
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def _save_config(self):
+    if self._save_config_func:
+        try:
+            self._save_config_func(self.config)
+            return
+        except Exception:
+            pass
+    _fallback_save_config_to_userfile(self.config)
+
+def _open_settings_menu(self):
+    menu = tk.Menu(self, tearoff=0)
+    menu.add_command(label="시험 폴더 경로 설정…", command=self._pick_exam_base_path)
+    menu.add_command(label="문제 신고 / 관리자 전송…", command=self._report_issue_dialog)
+    menu.add_separator()
+    menu.add_command(label="공유 드롭박스 폴더 설정…", command=self._pick_share_dir)
+    try:
+        x = self.winfo_pointerx(); y = self.winfo_pointery()
+        menu.tk_popup(x, y)
+    finally:
+        menu.grab_release()
+
+def _pick_exam_base_path(self):
+    new_base = filedialog.askdirectory(title="시험 폴더 최상위 경로 선택")
+    if not new_base:
+        return
+    self.base_path = new_base
+    # ✅ 전역 config에도 반영
+    self.config["default_exam_folder_toDCT2"] = new_base
+    self._save_config()
+
+    # 라디오버튼 UI 갱신
+    for w in self.exam_type_frame.winfo_children():
+        w.destroy()
+    for exam_type in self.get_exam_types():
+        rb = tk.Radiobutton(
+            self.exam_type_frame,
+            text=exam_type,
+            variable=self.exam_type_var,
+            value=exam_type,
+            font=("맑은 고딕", 13),
+            indicatoron=False, width=25, padx=10, pady=5,
+            relief="raised", bd=2, selectcolor="#cce5ff",
+            command=self.update_exam_rounds,
+        )
+        rb.pack(anchor="w", pady=3)
+    messagebox.showinfo("완료", "시험 폴더 경로가 변경되었습니다.")
+
+
+def _pick_share_dir(self):
+    new_share = filedialog.askdirectory(title="메인PC 공유 드롭박스 폴더 선택")
+    if not new_share:
+        return
+    self.share_dir = new_share
+    # 🔁 여기만 변경
+    self.config["report_inbox"] = new_share      # 이전: self.config["share_dir"] = new_share
+    self._save_config()
+    messagebox.showinfo("완료", f"공유 폴더가 변경되었습니다.\n{self.share_dir}")
+
+def _unique_prefix(self, exam_id, student_id):
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    host = socket.gethostname()
+    rid = uuid.uuid4().hex[:8]
+    return f"{ts}_exam-{exam_id}_stu-{student_id}_{host}_{rid}"
+
+def _send_issue_bundle(self, meta_path: Path, result_html: Optional[Path], sb2_paths, anomalies_text: str):
+    share = Path(self.share_dir)
+    share.mkdir(parents=True, exist_ok=True)
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    exam_id = meta.get("exam_round_name", "unknown")
+    student_id = meta.get("username", "unknown")
+    prefix = self._unique_prefix(exam_id, student_id)
+
+    # JSON 요약
+    payload = {
+        "exam_id": exam_id,
+        "student_id": student_id,
+        "hostname": socket.gethostname(),
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "anomalies": (anomalies_text or "").strip(),
+        "app": "ExamSelector",
+        "submission_dir": meta.get("submission_dir"),
+    }
+    tmp_json = share / f"{prefix}.json.tmp"
+    fin_json = share / f"{prefix}.json"
+    with open(tmp_json, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_json, fin_json)  # 원자적 커밋
+
+    # ZIP 번들
+    tmp_zip = share / f"{prefix}.zip.tmp"
+    fin_zip = share / f"{prefix}.zip"
+    with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.write(meta_path, arcname="meta.json")
+        if result_html and result_html.exists():
+            z.write(result_html, arcname=result_html.name)
+        for p in sb2_paths or []:
+            pth = Path(p)
+            if pth.exists():
+                z.write(pth, arcname=f"sb2/{pth.name}")
+    os.replace(tmp_zip, fin_zip)
+def _report_issue_dialog(self):
+    # meta.json 찾기 (진행 중 시험이면 self.submission_meta_path 사용)
+    meta_path = None
+    if self.submission_meta_path and Path(self.submission_meta_path).exists():
+        meta_path = Path(self.submission_meta_path)
+    else:
+        pick = filedialog.askopenfilename(title="meta.json 선택", filetypes=[("JSON", "*.json")])
+        if pick:
+            meta_path = Path(pick)
+
+    if not meta_path or not meta_path.exists():
+        messagebox.showerror("오류", "meta.json을 찾지 못했습니다.")
+        return
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    subdir = Path(meta.get("submission_dir", "") or meta_path.parent)
+    result_html = subdir / "시험결과.html"
+    sb2_paths = meta.get("sb2_files", [])
+
+    desc = simpledialog.askstring("문제 신고", "오류/이상 내용을 간단히 적어주세요.")
+    if desc is None:
+        return
+
+    try:
+        self._send_issue_bundle(meta_path, result_html, sb2_paths, desc)
+        messagebox.showinfo("완료", "관리자에게 전송되었습니다.")
+    except Exception as e:
+        messagebox.showerror("오류", f"전송 중 오류: {e}")
+
+
+
 
 class ExamSelector(tk.Tk):
     def __init__(self, base_path):
@@ -18,11 +178,27 @@ class ExamSelector(tk.Tk):
         self.base_path = base_path
         print(f"ExamSelector self.base_path: {self.base_path}")
 
+        # ✅ 추가: 공유 드롭박스(메인PC) 기본 경로 및 설정 로드
+
+        self.share_dir = report_inbox         # ✅ 문제신고 전송 경로
+        # ✅ 추가: 전역 config 참조 & 저장함수 자리(없으면 None)
+        self.config = config
+        self._save_config_func = None
+
         self.submission_meta_path = None  # ✅ 제출본 경로 저장용
 
         # 창 크기
         window_width = 480
         window_height = 620
+
+        # ✅ 추가: 우상단 설정 버튼
+        topbar = tk.Frame(self)
+        topbar.pack(fill="x", pady=(6, 0))
+        settings_btn = tk.Button(
+            topbar, text="⚙ 설정", command=self._open_settings_menu,
+            font=("맑은 고딕", 10, "bold")
+        )
+        settings_btn.pack(side="right", padx=8)
 
         # 화면 해상도 기준 중앙 위치 계산
         screen_width = self.winfo_screenwidth()
@@ -120,6 +296,8 @@ class ExamSelector(tk.Tk):
         # self.show_exam_types()
 
         # def set_icon(self):
+
+
 
     def select_folder_for_regrade(self):
         from tkinter import filedialog
@@ -325,3 +503,13 @@ class ExamSelector(tk.Tk):
         meta_path = self.submission_dir / "meta.json"
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4, ensure_ascii=False)
+
+
+# ---- 클래스 바깥 전역에 정의된 함수들을 ExamSelector 메서드로 바인딩 ----
+ExamSelector._open_settings_menu   = _open_settings_menu
+ExamSelector._pick_exam_base_path  = _pick_exam_base_path
+ExamSelector._pick_share_dir       = _pick_share_dir
+ExamSelector._unique_prefix        = _unique_prefix
+ExamSelector._send_issue_bundle    = _send_issue_bundle
+ExamSelector._report_issue_dialog  = _report_issue_dialog
+ExamSelector._save_config          = _save_config
