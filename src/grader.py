@@ -142,7 +142,6 @@ def find_all_diff_elements(a, b, path=""):
 
     return diffs
 
-
 def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
     diff_rows = []
     for script_idx, (exp_blocks, act_blocks) in enumerate(
@@ -153,6 +152,7 @@ def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
                 diff_positions = find_all_diff_elements(b_exp, b_act)
                 parsed_paths = parse_paths(diff_positions)
 
+                # ✅ exp = 정답, act = 제출
                 exp_str = interpret_block(b_exp, highlight_paths=parsed_paths)
                 act_str = interpret_block(b_act, highlight_paths=parsed_paths)
 
@@ -165,8 +165,8 @@ def make_diff_html(expected_scripts, actual_scripts, sprite_name=""):
   </thead>
   <tbody>
     <tr>
-      <td><div class='block-display correct'>{act_str}</div></td>
-      <td><div class='block-display wrong'>{exp_str}</div></td>
+      <td><div class='block-display correct'>{exp_str}</div></td>
+      <td><div class='block-display wrong'>{act_str}</div></td>
     </tr>
   </tbody>
 </table>
@@ -227,6 +227,33 @@ def compare_normalized_projects(s_project, a_project):
     errors = []
     diff_count = 0  # 차이난 블록 수 카운트
 
+    # 1) ✅ 배경(Stage) 먼저 비교
+    s_stage = s_project.get("stage", {})
+    a_stage = a_project.get("stage", {})
+
+    # 빈 블록 검사
+    if "__EMPTY__" in str(s_stage.get("scripts")):
+        errors.append("'배경'에 비어 있는 블록 있음")
+    else:
+        # 스크립트 비교
+        if not scripts_are_equivalent(s_stage.get("scripts", []), a_stage.get("scripts", [])):
+            diff_html = make_diff_html(
+                a_stage.get("scripts", []),   # ✅ 정답 먼저
+                s_stage.get("scripts", []),   # ❌ 제출 나중
+                sprite_name="배경"
+            )
+            errors.append(diff_html)
+            diff_count += 1
+
+    # 코스튬 비교
+    if not costumes_are_equivalent(s_stage.get("costumes", []), a_stage.get("costumes", [])):
+        errors.append("'배경'의 모양 다름")
+
+    # 사운드 비교
+    if s_stage.get("sounds") != a_stage.get("sounds"):
+        errors.append("'배경'의 소리 다름")
+
+    # 2) ✅ 스프라이트 비교 (기존 로직 보강)
     s_sprites = {s["objName"]: s for s in s_project["sprites"]}
     a_sprites = {s["objName"]: s for s in a_project["sprites"]}
 
@@ -265,10 +292,16 @@ def compare_normalized_projects(s_project, a_project):
         # if s.get("scripts") != a.get("scripts"):
         #     errors.append(f"'{name}' 스프라이트의 스크립트 다름")
 
-        if not scripts_are_equivalent(s["scripts"], a["scripts"]):
-            diff_html = make_diff_html(s["scripts"], a["scripts"], sprite_name=name)
+        # 스크립트 비교
+        if not scripts_are_equivalent(s.get("scripts", []), a.get("scripts", [])):
+            diff_html = make_diff_html(
+                a.get("scripts", []),  # ✅ 정답 먼저
+                s.get("scripts", []),  # ❌ 제출 나중
+                sprite_name=name
+            )
             errors.append(diff_html)
             diff_count += 1
+
 
         # costumes 비교
         # if s.get("costumes") != a.get("costumes"):
@@ -376,6 +409,9 @@ def normalize_project_json(project_json, ignore_costume_image=True):
                 ],
                 key=lambda x: x.get("soundName") or "",
             ),
+
+                    # ✅ 배경(Stage) 스크립트 포함
+        "scripts": clean_scripts(project_json.get("scripts")),
         },
         "sprites": normalized_children,
     }
@@ -443,7 +479,10 @@ def grade_from_meta(meta_path):
 
         try:
             s_normalized = normalize_project_json(s_json)
+            print(f"s_normalized: {s_normalized}")
             a_normalized = normalize_project_json(a_json)
+            print(f"a_normalized: {a_normalized}")
+
         except Exception as e:
             print("▶ 정규화 중 예외 발생! 🔥")
             print("s_json keys:", s_json.keys())

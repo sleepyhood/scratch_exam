@@ -34,6 +34,8 @@ BLOCK_CLASS_MAP = {
     "changeSizeBy:": "cmd-looks",
     "goBackByLayers:": "cmd-looks",
     "comrToFront": "cmd-looks",
+    "startScene":  "cmd-looks",
+
     #
     # 소리
     "playSound:": "cmd-sound",
@@ -610,6 +612,10 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         return f"<span class='{css_class}'>크기</span><br/>"
     elif opcode == "comrToFront":
         return f"<span class='{css_class}'>맨 앞으로 순서 바꾸기</span><br/>"
+    elif opcode == "startScene":
+        stage_name = interpret_block(block[1])
+        return f"<span class='{css_class}'>배경을 {stage_name} (으)로 바꾸기</span><br/>"
+    
     ############################
 
     elif opcode == "doForever":
