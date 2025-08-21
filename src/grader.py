@@ -14,6 +14,16 @@ import re
 from urllib.parse import quote
 from pathlib import Path
 
+
+# 파일 상단(혹은 compare_normalized_projects 위)에 추가
+# 파일 상단 근처에 추가
+IGNORED_SPRITE_REGEX = re.compile(r"^보기블(록|럭)\d*$")
+def is_ignored_sprite(name: str) -> bool:
+    if not isinstance(name, str):
+        return False
+    normalized = re.sub(r"[\s\u00A0]+", "", name).lower()  # 모든 공백/nbsp 제거
+    return bool(IGNORED_SPRITE_REGEX.match(normalized))
+
 def parse_paths(paths):
     parsed = []
     for path in paths:
@@ -254,28 +264,28 @@ def compare_normalized_projects(s_project, a_project):
         errors.append("'배경'의 소리 다름")
 
     # 2) ✅ 스프라이트 비교 (기존 로직 보강)
-    s_sprites = {s["objName"]: s for s in s_project["sprites"]}
-    a_sprites = {s["objName"]: s for s in a_project["sprites"]}
+    s_sprites = {
+        sp["objName"]: sp
+        for sp in s_project["sprites"]
+        if sp.get("objName") is not None and not is_ignored_sprite(sp["objName"])
+    }
+    a_sprites = {
+        sp["objName"]: sp
+        for sp in a_project["sprites"]
+        if sp.get("objName") is not None and not is_ignored_sprite(sp["objName"])
+    }
 
     all_names = set(s_sprites.keys()).union(a_sprites.keys())
 
     for name in sorted(all_names):
-        # "보기블럭"은 채점에서 제외
-        if name.replace(" ", "") in [
-            "보기블럭",
-            "보기블록",
-            "보기블록1",
-            "보기블록2",
-            "보기블록3",
-            "보기블록4",
-        ]:
-            continue
 
         s = s_sprites.get(name)
         a = a_sprites.get(name)
 
-        print(s.get("costumes", []))  # 비교 대상 costume 출력해보기
-        print(a.get("costumes", []))  # 비교 대상 costume 출력해보기
+        # print(s.get("costumes", []))  # 비교 대상 costume 출력해보기
+        # print(a.get("costumes", []))  # 비교 대상 costume 출력해보기
+
+        # ⛔ 디버그 print는 None 체크 이후에 하거나 제거
 
         if s is None:
             errors.append(f"스프라이트 '{name}'가 제출본에 없음")
@@ -373,12 +383,15 @@ def normalize_project_json(project_json, ignore_costume_image=True):
             ),
         }
 
+    # normalize_project_json() 안에서 children 처리 부분 수정
     children = project_json.get("children", [])
     normalized_children = sorted(
         [
             extract_essential_sprite(sprite)
             for sprite in children
-            if isinstance(sprite, dict) and sprite.get("objName") is not None
+            if isinstance(sprite, dict)
+            and sprite.get("objName") is not None
+            and not is_ignored_sprite(sprite["objName"])   # ✅ 보기블록류 제거
         ],
         key=lambda s: s.get("objName") or "",
     )
@@ -497,35 +510,29 @@ def grade_from_meta(meta_path):
             # pp.pprint(a_normalized)
 
             # 100점일 경우
-            if s_normalized == a_normalized:
-                results.append(
-                    {
-                        "제출": submit_file.name,
-                        "제출파일경로": str(submit_file),  # ✅ 여기 추가
-                        "정답": matched_answer.name,
-                        "정답여부": "O",
-                        "문제PDF": pdf_full_path ,  # 🔍 추가된 항목
-                            "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
-
-                    }
-                )
+            diff_errors = compare_normalized_projects(s_normalized, a_normalized)
+            if not diff_errors:
+                # ✅ 차이가 없으면 정답
+                results.append({
+                    "제출": submit_file.name,
+                    "제출파일경로": str(submit_file),
+                    "정답": matched_answer.name,
+                    "정답여부": "O",
+                    "문제PDF": pdf_full_path,
+                    "시작페이지": i + 1,
+                })
             else:
-                # 차이점 수집
-                diff_errors = compare_normalized_projects(s_normalized, a_normalized)
-                print(f"diff_errors: {diff_errors}")
-                tmp = str(s_normalized) + "\n\n" + str(a_normalized)
-                results.append(
-                    {
-                        "제출": submit_file.name,
-                        "제출파일경로": str(submit_file),  # ✅ 여기 추가
-                        "정답": matched_answer.name,
-                        "정답여부": "X",
-                        "오류내용": "; ".join(diff_errors),
-                        "문제PDF": pdf_full_path ,  # 🔍 추가된 항목
-                            "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+                # ❌ 차이가 있으면 오답
+                results.append({
+                    "제출": submit_file.name,
+                    "제출파일경로": str(submit_file),
+                    "정답": matched_answer.name,
+                    "정답여부": "X",
+                    "오류내용": "; ".join(diff_errors),
+                    "문제PDF": pdf_full_path,
+                    "시작페이지": i + 1,
+                })
 
-                    }
-                )
         except Exception as e:
             tb = traceback.format_exc()
 
