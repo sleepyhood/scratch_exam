@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import font as tkfont
 
 import os
 from exam_app import ExamApp
@@ -175,6 +176,10 @@ def _report_issue_dialog(self):
 class ExamSelector(tk.Tk):
     def __init__(self, base_path):
         super().__init__()
+        try:
+            self.tk.call('tk', 'scaling', 1.25)   # 환경에 맞게 1.0~1.5
+        except Exception:
+            pass
         self.base_path = base_path
         print(f"ExamSelector self.base_path: {self.base_path}")
 
@@ -239,6 +244,12 @@ class ExamSelector(tk.Tk):
             )
             rb.pack(anchor="w", pady=3)
 
+        types_ = self.get_exam_types()
+        if len(types_) == 1:
+            only = types_[0]
+            self.exam_type_var.set(only)
+            self.update_exam_rounds()
+
         tk.Label(
             self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")
         ).pack(pady=10)
@@ -286,6 +297,8 @@ class ExamSelector(tk.Tk):
             **regrade_btn_style,
         )
         self.regrade_btn.pack(pady=10)
+        self.bind("<Return>", lambda e: self._try_start())
+        self.bind_all("<Alt-Left>", lambda e: self.show_exam_types())
 
         # self.label = tk.Label(self, text="시험 등급을 선택하세요", font=("Arial", 16))
         # self.label.pack(pady=20)
@@ -297,6 +310,15 @@ class ExamSelector(tk.Tk):
 
         # def set_icon(self):
 
+    # 클래스 메서드 추가
+    def _try_start(self):
+        if self.start_btn["state"] == "normal":
+            self.confirm_start()
+            
+    def ask_username(self, initial=""):
+        dlg = UsernameDialog(self, title="이름 입력", message="수험자 이름을 입력하세요:", initial=initial)
+        self.wait_window(dlg)              # ← 다이얼로그 닫힐 때까지 블록
+        return dlg.value
 
 
     def select_folder_for_regrade(self):
@@ -324,19 +346,23 @@ class ExamSelector(tk.Tk):
     def update_exam_rounds(self, event=None):
         selected_type = self.exam_type_var.get()
         exam_type_path = os.path.join(self.base_path, selected_type)
-        rounds = [
-            folder
-            for folder in os.listdir(exam_type_path)
-            if os.path.isdir(os.path.join(exam_type_path, folder))
-        ]
+        rounds = [folder for folder in os.listdir(exam_type_path)
+                if os.path.isdir(os.path.join(exam_type_path, folder))]
+
         self.exam_round_combo["values"] = rounds
         self.exam_round_combo["state"] = "readonly"
-        self.exam_round_combo.set("")
+
+        if len(rounds) == 1:
+            self.exam_round_combo.set(rounds[0])
+            self.start_btn["state"] = "normal"
+        else:
+            self.exam_round_combo.set("")
+            self.start_btn["state"] = "disabled"
 
         def enable_start(e):
             self.start_btn["state"] = "normal"
-
         self.exam_round_combo.bind("<<ComboboxSelected>>", enable_start)
+
 
     def confirm_start(self):
         exam_type = self.exam_type_var.get()
@@ -398,13 +424,16 @@ class ExamSelector(tk.Tk):
         exam_round_name = os.path.basename(selected_path)
 
         # ✅ 사용자 이름 입력받기
-        self.withdraw()
-
-        username = simpledialog.askstring("이름 입력", "수험자 이름을 입력하세요:")
-        self.deiconify()
+        # self.withdraw()
+        username = self.ask_username(initial=self.config.get("last_username", ""))
+        # self.deiconify()
 
         if not username:
             username = "미입력"
+        else:
+            # 다음 실행 때 기본값으로 보여주기
+            self.config["last_username"] = username
+            self._save_config()
 
         # ✅ 존재 여부 초기화
         pdf_path = None
@@ -446,7 +475,9 @@ class ExamSelector(tk.Tk):
         if missing:
             messagebox.showerror(
                 "리소스 누락",
-                f"다음 항목이 누락되었습니다: {', '.join(missing)}\n시험 폴더를 다시 선택해주세요.",
+                "다음 항목이 누락되었습니다: {}\n\n검사한 경로:\n{}".format(
+                    ", ".join(missing), selected_path
+                ),
             )
             return  # 함수 종료 → 초기 selector화면 유지됨
 
@@ -513,3 +544,99 @@ ExamSelector._unique_prefix        = _unique_prefix
 ExamSelector._send_issue_bundle    = _send_issue_bundle
 ExamSelector._report_issue_dialog  = _report_issue_dialog
 ExamSelector._save_config          = _save_config
+
+
+
+class UsernameDialog(tk.Toplevel):
+    def __init__(self, parent, title="이름 입력", message="수험자 이름을 입력하세요:", initial=""):
+        super().__init__(parent)
+
+        # try:
+        #     # 윈도우 DPI 125~150%에서 글씨 작으면 1.25~1.5로 조정
+        #     self.tk.call('tk', 'scaling', 1.25)
+        # except Exception:
+        #     pass
+
+        # self.minsize(480, 620)  # 창 최소 크기 보장
+        # self.resizable(False, False)  # 선택: 리사이즈 막기
+
+        self.transient(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.grab_set()
+        self.value = None
+        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
+
+
+        # 폰트 크게
+        self.f_label = tkfont.Font(family="맑은 고딕", size=16, weight="bold")
+        self.f_entry = tkfont.Font(family="맑은 고딕", size=16)
+        self.f_btn   = tkfont.Font(family="맑은 고딕", size=14, weight="bold")
+
+        pad = 16
+        frm = tk.Frame(self, padx=pad, pady=pad)
+        frm.pack(fill="both", expand=True)
+
+        lbl = tk.Label(frm, text=message, font=self.f_label)
+        lbl.pack(anchor="w", pady=(0, 8))
+
+        self.entry = tk.Entry(frm, font=self.f_entry, width=24)
+        self.entry.pack(fill="x", pady=(0, 12))
+        if initial:
+            self.entry.insert(0, initial)
+        self.entry.select_range(0, tk.END)
+        self.entry.focus_set()
+
+        btns = tk.Frame(frm)
+        btns.pack(fill="x")
+
+        ok = tk.Button(
+            btns, text="확인", font=self.f_btn, command=self.on_ok,
+            bg="#007BFF", fg="white", activebackground="#0056b3", activeforeground="white"
+        )
+        ok.pack(side="right", padx=(8, 0))
+
+        cancel = tk.Button(btns, text="취소", font=self.f_btn, command=self.on_cancel)
+        cancel.pack(side="right")
+
+        # 단축키
+        self.bind("<Return>", lambda e: self.on_ok())
+        self.bind("<Escape>", lambda e: self.on_cancel())
+
+        # 가시성/포커스 확보
+        self.update_idletasks()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(200, lambda: self.attributes("-topmost", False))
+
+        # 중앙 배치
+        self.after(10, lambda: self._center(parent, width=520, height=180))
+
+    def _center(self, parent, width=520, height=180):
+        self.update_idletasks()
+        w = max(width, self.winfo_width())
+        h = max(height, self.winfo_height())
+        try:
+            # 부모 중앙
+            px, py = parent.winfo_rootx(), parent.winfo_rooty()
+            pw, ph = parent.winfo_width(), parent.winfo_height()
+            x = px + (pw - w) // 2
+            y = py + (ph - h) // 2
+        except Exception:
+            # 폴백: 화면 중앙
+            sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+            x = (sw - w) // 2
+            y = (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def on_ok(self):
+        val = self.entry.get().strip()
+        if not val:
+            messagebox.showwarning("입력 필요", "이름을 입력해주세요.", parent=self)
+            return
+        self.value = val
+        self.destroy()
+
+    def on_cancel(self):
+        self.value = None
+        self.destroy()
