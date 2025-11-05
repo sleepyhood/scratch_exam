@@ -25,11 +25,86 @@ from loading_json import load_config
 import fitz  # 외부 모듈은 직접 import
 # 파일 상단 import 구역에 추가
 import win32process
-
+import win32con
 # 사용 예시
 config = load_config()
 scratch_path = config["scratch_path"]
 root_password = config["root_password"]
+icon_path = config.get("app_icon_path")        
+# def _kill_proc_tree(proc: subprocess.Popen):
+#     try:
+#         p = psutil.Process(proc.pid)
+#         for child in p.children(recursive=True):
+#             try: child.kill()
+#             except: pass
+#         try: p.kill()
+#         except: pass
+#     except Exception:
+#         pass
+def _kill_proc_tree(proc: subprocess.Popen):
+    try:
+        p = psutil.Process(proc.pid)
+        for child in p.children(recursive=True):
+            try: child.kill()
+            except: pass
+        try: p.kill()
+        except: pass
+    except Exception:
+        pass
+
+
+def _restore_and_place(hwnd, x, y, w, h, topmost=True):
+    try:
+        # 최소화/최대화 상태면 먼저 복원
+        if win32gui.IsIconic(hwnd) or win32gui.IsZoomed(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            time.sleep(0.05)
+        win32gui.ShowWindow(hwnd, win32con.SW_SHOWNOACTIVATE)
+    except Exception:
+        pass
+    _move_and_topmost(hwnd, x, y, w, h, topmost=topmost)
+        
+# exam_app.py 유틸 영역에 추가
+def _enum_windows_for_pid_tree(root_pid):
+    pids = {root_pid}
+    try:
+        for c in psutil.Process(root_pid).children(recursive=True):
+            pids.add(c.pid)
+    except: pass
+
+    wins = []
+    def _cb(hwnd, acc):
+        if win32gui.IsWindowVisible(hwnd):
+            try:
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                if pid in pids:
+                    acc.append(hwnd)
+            except: pass
+    win32gui.EnumWindows(_cb, wins)
+    return wins
+
+def _pick_main_window_for_pid(root_pid, timeout=15.0):
+    """부모/자식 PID 전체에서 '가장 큰 영역'의 창을 메인 창으로 간주"""
+    start = time.time()
+    best = None; best_area = 0
+    while time.time() - start < timeout:
+        wins = _enum_windows_for_pid_tree(root_pid)
+        for w in wins:
+            try:
+                l,t,r,b = win32gui.GetWindowRect(w)
+                area = max(0, r-l) * max(0, b-t)
+                title = (win32gui.GetWindowText(w) or "")
+                # 제목에 Scratch가 있는 창을 우선 가중치
+                if ("Scratch" in title) or ("스크래치" in title):
+                    area *= 2
+                if area > best_area:
+                    best = w; best_area = area
+            except: pass
+        if best_area > 600*400:   # 충분히 큰 창이면 조기 확정
+            break
+        time.sleep(0.2)
+    return best
+
 
 # ★★★ find_scratch_window 개선 + 보조 유틸들 추가 (기존 함수 대체/추가) ★★★
 
@@ -108,8 +183,11 @@ def repair_scratch_layout(hwnd=None, bottom_gap=0):
     if not hwnd:
         return False
 
+    # x, y, w, h = _rect_for_right_two_thirds(bottom_gap=bottom_gap)
+    # _move_and_topmost(hwnd, x, y, w, h, topmost=True)
+
     x, y, w, h = _rect_for_right_two_thirds(bottom_gap=bottom_gap)
-    _move_and_topmost(hwnd, x, y, w, h, topmost=True)
+    _restore_and_place(hwnd, x, y, w, h, topmost=True)
 
     try:
         rect = win32gui.GetWindowRect(hwnd)
@@ -123,14 +201,49 @@ def repair_scratch_layout(hwnd=None, bottom_gap=0):
 
 
 
+def _norm(p):
+    try:
+        return os.path.normcase(os.path.normpath(p or ""))
+    except Exception:
+        return p or ""
+
+def _looks_like_scratch_proc(p: psutil.Process) -> bool:
+    """scratch_path와 정확히 일치하거나, 자식 트리 내 창 제목이 Scratch인 AIR 런처만 허용"""
+    try:
+        exe = _norm(p.exe())
+        tgt = _norm(scratch_path)
+        if exe and tgt and exe == tgt:
+            return True
+
+        # 보조 규칙: AIR 런처/자식인데 'Scratch' 메인창을 실제로 가지고 있으면만 허용
+        name = (p.name() or "").lower()
+        if name in ("adobe air.exe", "adobe air", "scratch 2.exe", "scratch.exe"):
+            for hwnd in _enum_windows_for_pid_tree(p.pid):
+                title = (win32gui.GetWindowText(hwnd) or "")
+                if ("Scratch 2" in title) or ("Offline Editor" in title) or ("스크래치" in title):
+                    return True
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    return False
+
 def kill_scratch_if_running():
-    for proc in psutil.process_iter(["pid", "name"]):
-        if "Scratch" in proc.info["name"]:
-            try:
-                proc.kill()
-                print(f"✅ 이전 Scratch 프로세스 종료됨: {proc.info['pid']}")
-            except Exception as e:
-                print(f"❌ 종료 실패: {e}")
+    victims = []
+    for p in psutil.process_iter(["pid", "name", "exe"]):
+        try:
+            if _looks_like_scratch_proc(p):
+                victims.append(p)
+        except Exception:
+            pass
+
+    for p in victims:
+        try:
+            for c in p.children(recursive=True):
+                try: c.kill()
+                except: pass
+            p.kill()
+        except Exception:
+            pass
+
 
 
 def disable_close_button(hwnd):
@@ -143,51 +256,43 @@ def disable_close_button(hwnd):
 # ★★★ open_scratch_and_position 개선 (기존 함수 대체) ★★★
 def open_scratch_and_position(sb2_path, x=400, y=0, width=800, height=700):
     sb2_path = os.path.abspath(sb2_path)
-    print("🧪 실행 경로:", sb2_path)
-
     if not os.path.exists(sb2_path):
         messagebox.showerror("Error", f"파일이 존재하지 않습니다:\n{sb2_path}")
-        return None
+        return None, None
 
-    # 실행 중인 Scratch 종료
+    # 1) 완전 정리
     kill_scratch_if_running()
     time.sleep(0.2)
 
-    try:
-        cmd = f'"{scratch_path}" "{sb2_path}"'
-        proc = subprocess.Popen(shlex.split(cmd))
-    except Exception as e:
-        messagebox.showerror("Error", f"Scratch 실행 실패: {e}")
-        return None
+    # 2) 실행
+    cmd = f'"{scratch_path}" "{sb2_path}"'
+    proc = subprocess.Popen(shlex.split(cmd))
 
-    # 1) PID 기반으로 실제 윈도우 핸들 대기
-    hwnd = _wait_for_hwnd_by_pid(proc.pid, timeout=10.0)
-
-    # 2) 폴백: 제목 기반 검색
-    if hwnd is None:
-        for _ in range(20):
-            hwnd = find_scratch_window()
-            if hwnd:
-                break
-            time.sleep(0.2)
+    # 3) 메인 창 대기(부모+자식 PID 전체에서 가장 큰 창)
+    hwnd = _pick_main_window_for_pid(proc.pid, timeout=18.0)
 
     if hwnd is None:
-        messagebox.showwarning("경고", "Scratch 창을 찾지 못했습니다.")
-        return proc  # 프로세스만 반환(이후 repair 단계에서 재시도)
+        messagebox.showwarning("경고", "Scratch 메인 창을 찾지 못했습니다.")
+        return proc, None
 
-    # 배치 + 닫기 버튼 비활성화
-    _move_and_topmost(hwnd, x, y, width, height, topmost=True)
+    # 4) 메인 창만 배치/제어 (스플래시는 무시)
+    # 기존
+    # _move_and_topmost(hwnd, x, y, width, height, topmost=True)
+    # disable_close_button(hwnd)
+
+    # 변경
+    _restore_and_place(hwnd, x, y, width, height, topmost=True)
     disable_close_button(hwnd)
 
-    # 오프스크린 방지 보정
     try:
         rect = win32gui.GetWindowRect(hwnd)
         if _is_offscreen(rect):
             _move_and_topmost(hwnd, x, y, width, height, topmost=True)
-    except Exception:
-        pass
+    except: pass
 
-    return proc
+    print(f"[SCRATCH] started pid={proc.pid}, hwnd={hwnd}")
+
+    return proc, hwnd
 
 
 class ExamApp(tk.Tk):
@@ -202,19 +307,19 @@ class ExamApp(tk.Tk):
     ):
 
         # PyInstaller 환경에서는 sys._MEIPASS 경로 사용
-        if hasattr(sys, "_MEIPASS"):
-            icon_path = os.path.join(sys._MEIPASS, "app_icon.ico")
-        else:
-            icon_path = "app_icon.ico"
+        # if hasattr(sys, "_MEIPASS"):
+        #     icon_path = os.path.join(sys._MEIPASS, "app_icon.ico")
+        # else:
+        #     icon_path = "app_icon.ico"
 
-        try:
-            self.iconbitmap(icon_path)
-        except Exception as e:
-            print(f"[아이콘 오류] {e}")
-
+        self._launching_scratch = False
         self.submission_dir = submission_dir
         self.skipped_pages = []
         self.submitted_pages = []
+        
+        self.PDF_MIN_ZOOM = 0.8     # 80%
+        self.PDF_MAX_ZOOM = 2.0     # 200%
+        self.PDF_DEFAULT_ZOOM = 1.2 # 120% (현재 초기값과 일치)
         # self.user_home = Path.home()
         # today = datetime.now().strftime("%Y%m%d")
 
@@ -248,8 +353,24 @@ class ExamApp(tk.Tk):
         else:
             self.current_page = 0
 
+        # 1) 반드시 가장 먼저 Tk 초기화
         super().__init__()
 
+        # 2) 아이콘 경로 결정
+        # if hasattr(sys, "_MEIPASS"):
+        #     icon_path = os.path.join(sys._MEIPASS, "app_icon.ico")
+        # else:
+        #     # 실행 파일과 같은 폴더 기준 (원하면 절대경로로)
+        #     icon_path = os.path.join(os.path.dirname(__file__), "app_icon.ico")
+
+        print(f"[아이콘 경로] {icon_path}")
+
+        # 3) 아이콘 적용 (Windows .ico)
+        try:
+            self.iconbitmap(icon_path)          # 또는 self.iconbitmap(default=icon_path)
+        except Exception as e:
+            print(f"[아이콘 오류] {e}")
+        
 
         # ✅ 문제지 PDF 복사: 이름에 날짜와 학생 이름을 포함
         try:
@@ -316,9 +437,10 @@ class ExamApp(tk.Tk):
         self.sb2_files = sb2_files
         # print(os.path.exists(sb2_files[0]))
         self.scratch_proc = None
+        self.scratch_hwnd = None
 
-        self.pdf_viewer = PDFPageViewer(self, self.pdf_path, initial_zoom=1)
-        self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1 / 3)
+        # self.pdf_viewer = PDFPageViewer(self, self.pdf_path, initial_zoom=1)
+        # self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1 / 3)
 
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -326,14 +448,16 @@ class ExamApp(tk.Tk):
         pdf_canvas_width = int(screen_width / 3)
         pdf_canvas_height = screen_height
 
+        # 아래 한 세트만 남기세요
         self.pdf_viewer = PDFPageViewer(
             self,
             self.pdf_path,
-            initial_zoom=1.2,
-            canvas_width=pdf_canvas_width,
-            canvas_height=pdf_canvas_height,
+            initial_zoom=self.PDF_DEFAULT_ZOOM,
+            canvas_width=int(self.winfo_screenwidth()/3),
+            canvas_height=self.winfo_screenheight(),
         )
-        self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1 / 3)
+        self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1/3)
+
 
         self.right_frame = tk.Frame(self, bg="lightgray")
         self.right_frame.place(relx=1 / 3, rely=0, relheight=1, relwidth=2 / 3)
@@ -395,11 +519,14 @@ class ExamApp(tk.Tk):
             "width": 10                 # 버튼 너비 설정 (선택 사항)
         }
 
-        zoom_in_btn = tk.Button(left_group, text="확대 +", command=self.zoom_in, **btn_style)
-        zoom_in_btn.pack(side="left", padx=5)
+        self.zoom_in_btn  = tk.Button(left_group, text="확대 +", command=self.zoom_in,  **btn_style)
+        self.zoom_out_btn = tk.Button(left_group, text="축소 -", command=self.zoom_out, **btn_style)
+        self.zoom_in_btn.pack(side="left", padx=5)
+        self.zoom_out_btn.pack(side="left", padx=5)
 
-        zoom_out_btn = tk.Button(left_group, text="축소 -", command=self.zoom_out, **btn_style)
-        zoom_out_btn.pack(side="left", padx=5)
+        self.reset_btn = tk.Button(left_group, text="초기화/정렬", command=self.reset_layout, **btn_style)
+        self.reset_btn.pack(side="left", padx=5)
+
 
         self.zoom_label = tk.Label(left_group, text="100%", bg="lightgray")
         self.zoom_label.pack(side="left", padx=10)
@@ -450,6 +577,83 @@ class ExamApp(tk.Tk):
         self.enable_admin_exit()
         self.update_time_label()
 
+    def _settle_scratch(self, x, y, w, h, attempt=0, max_attempts=10):
+        # 프로세스가 살아있을 때만
+        if not (self.scratch_proc and self.scratch_proc.poll() is None):
+            return
+        hwnd = _pick_main_window_for_pid(self.scratch_proc.pid, timeout=1.0)
+        if hwnd:
+            # 메인창 판단: 면적이 충분히 크거나(예: 600x400 이상)
+            # 현재 목표 크기/위치와 차이가 나면 다시 배치
+            try:
+                l, t, r, b = win32gui.GetWindowRect(hwnd)
+                area = max(0, r-l) * max(0, b-t)
+                need_resize = (
+                    abs(l - x) > 2 or abs(t - y) > 2 or abs((r-l) - w) > 2 or abs((b-t) - h) > 2
+                )
+                if area < 600*400 or need_resize:
+                    _restore_and_place(hwnd, x, y, w, h, topmost=True)
+                    disable_close_button(hwnd)
+                self.scratch_hwnd = hwnd
+            except Exception as e:
+                print(f"[SCRATCH] settle check failed: {e}")
+        if attempt < max_attempts:
+            # 0.25초 간격으로 10회 정도 재확인 (총 ~2.5초)
+            self.after(250, lambda: self._settle_scratch(x, y, w, h, attempt+1, max_attempts))
+
+
+
+    def _raise_scratch_on_top(self, x=None, y=None, w=None, h=None):
+        try:
+            if self.scratch_proc and self.scratch_proc.poll() is None:
+                # 메인 창 재탐색(스플래시/보조창 회피)
+                hwnd = _pick_main_window_for_pid(self.scratch_proc.pid, timeout=1.2)
+                if hwnd:
+                    self.scratch_hwnd = hwnd
+                    if None not in (x,y,w,h):
+                        _move_and_topmost(hwnd, x, y, w, h, topmost=True)
+                    else:
+                        # 위치가 이미 계산돼 있으면 단순 TopMost 재적용
+                        l,t,r,b = win32gui.GetWindowRect(hwnd)
+                        _move_and_topmost(hwnd, l, t, r-l, b-t, topmost=True)
+                    disable_close_button(hwnd)
+        except Exception as e:
+            print(f"[SCRATCH] raise/topmost failed: {e}")
+
+    def _cull_other_scratch_instances(self):
+        """현재 self.scratch_proc 외의 Scratch 인스턴스가 있으면 종료(보조 실행 제거)"""
+        try:
+            if not (self.scratch_proc and self.scratch_proc.poll() is None):
+                return
+            keep_pid = self.scratch_proc.pid
+
+            victims = []
+            for p in psutil.process_iter(["pid","name","exe"]):
+                try:
+                    if not _looks_like_scratch_proc(p):  # 우리가 판별한 Scratch만
+                        continue
+                    if p.pid == keep_pid:
+                        continue
+                    # keep_pid의 자식(헬퍼)은 살려둠
+                    if p.pid in {c.pid for c in psutil.Process(keep_pid).children(recursive=True)}:
+                        continue
+                    victims.append(p)
+                except Exception:
+                    pass
+
+            for p in victims:
+                try:
+                    for c in p.children(recursive=True):
+                        try: c.kill()
+                        except: pass
+                    p.kill()
+                    print(f"[SCRATCH] culled extra instance pid={p.pid}")
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[SCRATCH] cull error: {e}")
+
+
     # ExamApp 클래스 안에 추가
     def get_bottom_gap(self, fallback=60):
         """
@@ -465,11 +669,22 @@ class ExamApp(tk.Tk):
         except Exception:
             return fallback
 
-
-    def rebuild_pdf_viewer(self):
-        """PDFPageViewer를 깨끗이 재생성(보이지 않는 이슈 대응)"""
+    def update_zoom_buttons(self):
         try:
-            # 기존 뷰어 제거
+            z = float(getattr(self.pdf_viewer, "zoom", self.PDF_DEFAULT_ZOOM))
+        except Exception:
+            z = self.PDF_DEFAULT_ZOOM
+        # 약간의 오차 허용치
+        eps = 1e-3
+        if hasattr(self, "zoom_in_btn"):
+            self.zoom_in_btn.config(state=("disabled" if z >= self.PDF_MAX_ZOOM - eps else "normal"))
+        if hasattr(self, "zoom_out_btn"):
+            self.zoom_out_btn.config(state=("disabled" if z <= self.PDF_MIN_ZOOM + eps else "normal"))
+
+
+    def rebuild_pdf_viewer(self, zoom=None):
+        """PDFPageViewer를 깨끗이 재생성(보이지 않는 이슈 대응) + 원하는 배율로 시작"""
+        try:
             if hasattr(self, "pdf_viewer") and self.pdf_viewer:
                 self.pdf_viewer.destroy()
         except Exception:
@@ -478,66 +693,96 @@ class ExamApp(tk.Tk):
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         pdf_canvas_width = int(screen_width / 3)
-        pdf_canvas_height = screen_height
 
-        # 새로 생성
+        # 요청 줌이 없으면 기본값, 있으면 상하한으로 클램프
+        if zoom is None:
+            z = self.PDF_DEFAULT_ZOOM
+        else:
+            z = max(self.PDF_MIN_ZOOM, min(self.PDF_MAX_ZOOM, float(zoom)))
+
         self.pdf_viewer = PDFPageViewer(
             self,
             self.pdf_path,
-            initial_zoom=1.2,
+            initial_zoom=z,
             canvas_width=pdf_canvas_width,
-            canvas_height=pdf_canvas_height,
+            canvas_height=screen_height,
         )
-        self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1 / 3)
-        # 현재 페이지/줌 복원
+        self.pdf_viewer.place(relx=0, rely=0, relheight=1, relwidth=1/3)
         self.pdf_viewer.set_page(self.current_page)
         self.update_zoom_label()
         self.update_idletasks()
-        # Tk를 잠깐 맨 앞으로 올렸다 내리기(가끔 가려지는 문제 해결)
-        try:
-            self.attributes("-topmost", True)
-            self.after(300, lambda: self.attributes("-topmost", False))
-        except Exception:
-            pass
+        # try:
+        #     self.attributes("-topmost", True)
+        #     self.after(300, lambda: self.attributes("-topmost", False))
+        # except Exception:
+        #     pass
+
+        # 버튼 활성/비활성 반영
+        self.update_zoom_buttons()
+
 
     # ExamApp.repair_layout 내 수정
+    # def repair_layout(self):
+    #     # 1) PDF 복구
+    #     self.rebuild_pdf_viewer()
+
+    #     # 2) Scratch 재배치 (하단 여백 계산해서 적용)
+    #     gap = self.get_bottom_gap()  # ← 하단 버튼바 높이 기반
+    #     hwnd = find_scratch_window()
+    #     ok = repair_scratch_layout(hwnd, bottom_gap=gap)
+    #     if not ok:
+    #         # 창이 없으면 현재 문제 파일로 재기동(여기도 gap 반영)
+    #         try:
+    #             original_sb2 = self.sb2_files[self.current_page]
+    #             original_name = Path(original_sb2).stem
+    #             if '_문제' in original_name:
+    #                 dest_name = original_name.replace('_문제', '_제출') + '.sb2'
+    #             else:
+    #                 dest_name = original_name + '_제출.sb2'
+    #             dest_path = self.submission_dir / dest_name
+    #             if not dest_path.exists():
+    #                 copy2(original_sb2, dest_path)
+
+    #             sw = self.winfo_screenwidth()
+    #             sh = self.winfo_screenheight()
+    #             x = int(sw * (1 / 3))
+    #             y = 0
+    #             w = int(sw * (2 / 3))
+    #             h = max(300, sh - gap)  # ← 여기서도 gap 적용
+    #             self.scratch_proc = open_scratch_and_position(str(dest_path), x, y, w, h)
+    #         except Exception as e:
+    #             print(f"[레이아웃 복구] Scratch 재기동 실패: {e}")
+
+    #     # 3) Tk 올려두기
+    #     try:
+    #         self.lift()
+    #         self.focus_force()
+    #     except Exception:
+    #         pass
+
     def repair_layout(self):
-        # 1) PDF 복구
         self.rebuild_pdf_viewer()
+        gap = self.get_bottom_gap()
 
-        # 2) Scratch 재배치 (하단 여백 계산해서 적용)
-        gap = self.get_bottom_gap()  # ← 하단 버튼바 높이 기반
-        hwnd = find_scratch_window()
-        ok = repair_scratch_layout(hwnd, bottom_gap=gap)
-        if not ok:
-            # 창이 없으면 현재 문제 파일로 재기동(여기도 gap 반영)
-            try:
-                original_sb2 = self.sb2_files[self.current_page]
-                original_name = Path(original_sb2).stem
-                if '_문제' in original_name:
-                    dest_name = original_name.replace('_문제', '_제출') + '.sb2'
-                else:
-                    dest_name = original_name + '_제출.sb2'
-                dest_path = self.submission_dir / dest_name
-                if not dest_path.exists():
-                    copy2(original_sb2, dest_path)
+        # 1) 살아있는 메인 창 찾기
+        hwnd = None
+        if self.scratch_hwnd and win32gui.IsWindow(self.scratch_hwnd):
+            hwnd = self.scratch_hwnd
+        elif self.scratch_proc and self.scratch_proc.poll() is None:
+            hwnd = _pick_main_window_for_pid(self.scratch_proc.pid, timeout=2.0)
 
-                sw = self.winfo_screenwidth()
-                sh = self.winfo_screenheight()
-                x = int(sw * (1 / 3))
-                y = 0
-                w = int(sw * (2 / 3))
-                h = max(300, sh - gap)  # ← 여기서도 gap 적용
-                self.scratch_proc = open_scratch_and_position(str(dest_path), x, y, w, h)
-            except Exception as e:
-                print(f"[레이아웃 복구] Scratch 재기동 실패: {e}")
+        # 2) 찾으면 그 창만 재배치, 못 찾으면 잠깐 뒤 재시도 (재실행 금지)
+        if hwnd:
+            if repair_scratch_layout(hwnd, bottom_gap=gap):
+                self.scratch_hwnd = hwnd
+        else:
+            self.after(400, self.repair_layout)
+            return
 
-        # 3) Tk 올려두기
         try:
-            self.lift()
-            self.focus_force()
-        except Exception:
-            pass
+            self.lift(); self.focus_force()
+        except: pass
+
 
     def update_time_label(self):
         base = self.time_log.get(self.current_page, 0)
@@ -629,78 +874,127 @@ class ExamApp(tk.Tk):
                 f,
             )
 
+    def reset_layout(self):
+        """PDF 배율을 기본값으로 초기화하고, 스크래치 창을 안전하게 재배치"""
+        # PDF 배율 초기화
+        self.rebuild_pdf_viewer(self.PDF_DEFAULT_ZOOM)
+
+        # 스크래치 재배치(기존 F11 동작)
+        gap = self.get_bottom_gap()
+        hwnd = None
+        if self.scratch_hwnd and win32gui.IsWindow(self.scratch_hwnd):
+            hwnd = self.scratch_hwnd
+        elif self.scratch_proc and self.scratch_proc.poll() is None:
+            hwnd = _pick_main_window_for_pid(self.scratch_proc.pid, timeout=2.0)
+
+        if hwnd:
+            if repair_scratch_layout(hwnd, bottom_gap=gap):
+                self.scratch_hwnd = hwnd
+        else:
+            # 잠시 후 한 번 더 재시도(재실행 금지)
+            self.after(400, self.repair_layout)
+        self.after(400, lambda: self._raise_scratch_on_top())
+
+
+
     def zoom_in(self):
+        z = float(getattr(self.pdf_viewer, "zoom", self.PDF_DEFAULT_ZOOM))
+        if z >= self.PDF_MAX_ZOOM - 1e-3:
+            # 이미 최대 → 버튼만 갱신
+            self.update_zoom_buttons()
+            return
         self.pdf_viewer.zoom_in()
+        # 한 번 더 확인(뷰어 내부 스텝으로 초과할 수 있음)
+        if getattr(self.pdf_viewer, "zoom", z) > self.PDF_MAX_ZOOM:
+            self.rebuild_pdf_viewer(self.PDF_MAX_ZOOM)
         self.update_zoom_label()
+        self.update_zoom_buttons()
 
     def zoom_out(self):
+        z = float(getattr(self.pdf_viewer, "zoom", self.PDF_DEFAULT_ZOOM))
+        if z <= self.PDF_MIN_ZOOM + 1e-3:
+            self.update_zoom_buttons()
+            return
         self.pdf_viewer.zoom_out()
+        if getattr(self.pdf_viewer, "zoom", z) < self.PDF_MIN_ZOOM:
+            self.rebuild_pdf_viewer(self.PDF_MIN_ZOOM)
         self.update_zoom_label()
+        self.update_zoom_buttons()
+
 
     def update_zoom_label(self):
         percent = int(self.pdf_viewer.zoom * 100)
         self.zoom_label.config(text=f"{percent}%")
 
+
     def load_page(self, page_num, retry=False):
-        if page_num < 0 or page_num >= len(self.sb2_files):
-            messagebox.showerror("오류", "잘못된 문제 번호입니다.")
+        if self._launching_scratch:
+            print("[SCRATCH] launch in progress → skip")
             return
+        self._launching_scratch = True        
 
-        # ✅ 1. 이전 문제 시간 저장 (가장 먼저 해야 함)
-        self.save_time_spent()
+        try:
+            if page_num < 0 or page_num >= len(self.sb2_files):
+                messagebox.showerror("오류", "잘못된 문제 번호입니다.")
+                return
 
-        # ✅ 2. 현재 문제 번호 갱신
-        self.current_page = page_num
+            # 1) 이전 문제 시간 저장
+            self.save_time_spent()
 
-        # ✅ 4. PDF 뷰어, 페이지, 라벨 업데이트
-        self.page_label.config(
-            text=f"문제 {page_num + 1} / {len(self.sb2_files)}"
-            + (" (건너뛴 문제)" if page_num in self.skipped_pages else "")
-        )
-        self.pdf_viewer.set_page(page_num)
-        self.update_zoom_label()
+            # 2) 현재 문제 번호 갱신
+            self.current_page = page_num
 
-        # ✅ 5. 이전 Scratch 종료
-        if self.scratch_proc and self.scratch_proc.poll() is None:
-            try:
-                self.scratch_proc.terminate()
-                self.scratch_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.scratch_proc.kill()
+            # 3) PDF/라벨 업데이트
+            self.page_label.config(
+                text=f"문제 {page_num + 1} / {len(self.sb2_files)}"
+                + (" (건너뛴 문제)" if page_num in self.skipped_pages else "")
+            )
+            self.pdf_viewer.set_page(page_num)
+            self.update_zoom_label()
 
-        # ✅ 6. 문제 파일 복사 → Scratch 실행
-        original_sb2 = self.sb2_files[page_num]
-        original_name = Path(original_sb2).stem
-        # dest_name = f"{original_name}_제출.sb2"
-        
-        if '_문제' in original_name:
-            dest_name = original_name.replace('_문제', '_제출') + '.sb2'
-        else:
-            dest_name = original_name + '_제출.sb2'
+            # 4) 이전 Scratch 종료 (항상 '실행 전에')
+            if self.scratch_proc and self.scratch_proc.poll() is None:
+                _kill_proc_tree(self.scratch_proc)
+                self.scratch_proc = None
+                self.scratch_hwnd = None
+                time.sleep(0.2)
 
-        dest_path = self.submission_dir / dest_name
+            # 5) 문제 파일 복사 → 제출본 경로 계산
+            original_sb2 = self.sb2_files[page_num]
+            original_name = Path(original_sb2).stem
+            if '_문제' in original_name:
+                dest_name = original_name.replace('_문제', '_제출') + '.sb2'
+            else:
+                dest_name = original_name + '_제출.sb2'
+            dest_path = self.submission_dir / dest_name
 
+            if not dest_path.exists():
+                copy2(original_sb2, dest_path)
 
-        if not dest_path.exists():
-            copy2(original_sb2, dest_path)
+            # 6) 배치 좌표 계산
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+            gap = self.get_bottom_gap()
+            x = int(screen_width * (1/3))
+            y = 0
+            w = int(screen_width * (2/3))
+            h = max(300, screen_height - gap)
+            print(f"🧪 Scratch 위치 및 크기: x={x}, y={y}, w={w}, h={h} (하단 여백 {gap}px)")
 
-        # ExamApp.load_page 내 스크래치 높이 계산 부분 교체
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x = int(screen_width * (1 / 3))
-        y = 0
-        gap = self.get_bottom_gap()         # ← 추가
-        w = int(screen_width * (2 / 3))
-        h = max(300, screen_height - gap)   # ← gap 반영
-        print(f"🧪 Scratch 위치 및 크기: x={x}, y={y}, w={w}, h={h} (하단 여백 {gap}px 반영)")
-        self.scratch_proc = open_scratch_and_position(str(dest_path), x, y, w, h)
+            # 7) Scratch '한 번만' 실행 (튜플로 받기!)
+            self.scratch_proc, self.scratch_hwnd = open_scratch_and_position(
+                str(dest_path), x, y, w, h
+            )
+            
+            # 7.5) 실행 직후 ~2.5초 동안 메인창 등장/크기변경을 감시하며 재배치
+            self.after(500, lambda: self._settle_scratch(x, y, w, h))
 
-        # ✅ 3. 다시풀기가 아닌 경우에만 시간 시작
-        # if not retry:
-        self.page_start_time = time.time()
+            # 8) 시간 시작 + 버튼 상태
+            self.page_start_time = time.time()
+            self.update_nav_buttons()
+        finally:
+            self._launching_scratch = False
 
-        # ✅ 7. 내비게이션 버튼 업데이트
-        self.update_nav_buttons()
 
     def save_time_spent(self):
         if self.page_start_time is not None:
@@ -711,14 +1005,9 @@ class ExamApp(tk.Tk):
             self.page_start_time = None
 
     def retry_page(self):
-        # 1) 시간 누적
         self.save_time_spent()
-
-        # 2) 현재 문제 다시 로드(Scratch 파일 재오픈/교체 포함)
         self.load_page(self.current_page, retry=True)
-
-        # 3) 레이아웃 강제 복구(여기서 PDF 재생성 + Scratch 재배치)
-        self.repair_layout()
+        self.after(300, self.repair_layout)  # 창이 완전히 뜬 뒤 재배치
 
     def skip_page(self):
         self.save_time_spent()  # 🔄 이 줄을 먼저!
@@ -767,7 +1056,7 @@ class ExamApp(tk.Tk):
         # Scratch 종료
         if self.scratch_proc and self.scratch_proc.poll() is None:
             try:
-                self.scratch_proc.terminate()
+                _kill_proc_tree(self.scratch_proc)
             except:
                 pass
 

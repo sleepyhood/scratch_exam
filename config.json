@@ -3,5 +3,6 @@
   "default_exam_folder": "C:\\Users\\osw\\Desktop\\Workspace\\#Projects\\250709_Scratch\\자격증 준비",
   "default_exam_folder_toDCT2": "\\\\DCT2\\Desktop\\DCT2_공유폴더\\COS 문제집(25.07 개정판)",
   "root_password": "1234",
-    "report_inbox": "\\\\DCT2\\Desktop\\DCT2_공유폴더\\ExamReports\\incoming"  
+  "report_inbox": "\\\\DCT2\\Desktop\\DCT2_공유폴더\\ExamReports\\incoming",
+  "app_icon_path": "\\\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\app_icon.ico"
 }

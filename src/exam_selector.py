@@ -299,7 +299,7 @@ class ExamSelector(tk.Tk):
         self.regrade_btn.pack(pady=10)
         self.bind("<Return>", lambda e: self._try_start())
         self.bind_all("<Alt-Left>", lambda e: self.show_exam_types())
-
+        self._starting = False
         # self.label = tk.Label(self, text="시험 등급을 선택하세요", font=("Arial", 16))
         # self.label.pack(pady=20)
 
@@ -309,6 +309,18 @@ class ExamSelector(tk.Tk):
         # self.show_exam_types()
 
         # def set_icon(self):
+
+    def confirm_start(self):
+        if self._starting: return
+        self._starting = True
+        try:
+            exam_type = self.exam_type_var.get()
+            exam_round = self.exam_round_var.get()
+            if exam_type and exam_round:
+                selected_path = os.path.join(self.base_path, exam_type, exam_round)
+                self.start_exam(selected_path)
+        finally:
+            self._starting = False
 
     # 클래스 메서드 추가
     def _try_start(self):
