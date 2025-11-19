@@ -7,6 +7,8 @@ from bootstrap import jinja2
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 import sys
+# html_report.py
+import json
 def get_next_regrade_count(output_dir):
     output_dir = Path(output_dir)
     existing = list(output_dir.glob("재채점_*회차_채점결과.html"))
@@ -67,13 +69,16 @@ def save_results_as_html(results, meta_path=None, regrade_mode=False, output_fil
 
     output_path = desktop / filename
     print(f"output_path: {output_path}")
+    fullcode_blob = [r.get("_fullcode", None) for r in results]
+
     html = template.render(
         results=results,
         correct_count=correct_count,
         today=today,
         total_time_str=format_time(total_time),
         regrade_count=regrade_count,
-        
+        fullcode_json=json.dumps(fullcode_blob, ensure_ascii=False)  # 👈 추가
+
     )
 
     with open(output_path, "w", encoding="utf-8") as f:

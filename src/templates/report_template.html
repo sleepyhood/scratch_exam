@@ -255,30 +255,74 @@ button:hover {
         margin-bottom: 4px;
       }
 
-      .error-detail {
-        margin-top: 8px;
-        padding: 6px;
-        background: #f3f4f6;
-        border-radius: 6px;
-      }
+/* 오류 상세 셀 안의 모든 표를 50/50로 고정 */
+.error-detail-cell table {
+  width: 100% !important;
+  table-layout: fixed !important; /* 자동 레이아웃 방지 */
+  border-collapse: collapse;
+}
 
-      .diff-table {
-        width: 90%;
-        margin-left: auto;
-        margin-right: auto;
-        border-collapse: collapse;
-        margin-top: 0.5em;
-      }
+.error-detail-cell table th,
+.error-detail-cell table td {
+  vertical-align: top;
+  padding: 0.5em;
+  border: 1px solid #ccc;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
 
-      .diff-table th,
-      .diff-table td {
-        vertical-align: top;
-        padding: 0.5em;
-        border: 1px solid #ccc;
-      }
-      .error-detail-row td {
-        background-color: #fff8e1;
-      }
+/* 첫 2개 열을 50%씩 강제 (다른 열이 있어도 앞 2개 기준은 고정) */
+.error-detail-cell table tr > *:nth-child(1),
+.error-detail-cell table tr > *:nth-child(2) {
+  width: 50% !important;
+}
+
+/* 내부 요소가 표 폭을 밀지 않게 */
+.error-detail-cell img,
+.error-detail-cell .block-display,
+.error-detail-cell .stack-html,
+.error-detail-cell pre,
+.error-detail-cell code {
+  max-width: 100% !important;
+  display: block;
+  white-space: normal;
+}
+
+/* 핵심: wrapper는 inline-block 유지 → 셀 폭(50%)로 늘어나지 않음 */
+.error-detail-cell .block-wrapper {
+  display: inline-block !important;
+  max-width: 100%;
+  white-space: normal;
+  vertical-align: top;
+}
+      /* 오류 비교표: 항상 50/50 */
+.diff-table{
+  width: 100% !important;
+  table-layout: fixed;      /* ✅ 자동 대신 고정 레이아웃 */
+  border-collapse: collapse;
+}
+.diff-table th,
+.diff-table td{
+  width: 50%;               /* ✅ 두 열 동일 폭 */
+  vertical-align: top;
+  padding: 0.5em;
+  border: 1px solid #ccc;
+  word-break: break-word;   /* 긴 텍스트/토큰 줄바꿈 */
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+
+/* 표 안의 블록 요소가 폭을 밀지 않게 */
+.diff-table .block-display,
+.diff-table .block-wrapper,
+.diff-table .stack-html,
+.diff-table img{
+  max-width: 100%;
+}
+
+
+
       .progress-container {
         width: 100%;
         background-color: #f1f5f9;
@@ -357,6 +401,65 @@ button:hover {
 }
 
 
+
+/* 열 너비/정렬 가이드(원하면 값 조정) */
+/* thead th:nth-child(1) { width: 42%; text-align: left; }
+thead th:nth-child(2) { width: 8%;  }
+thead th:nth-child(3) { width: 12%; }
+thead th:nth-child(4) { width: 10%; }
+thead th:nth-child(5) { width: 10%; }
+thead th:nth-child(6) { width: 10%; } */
+
+tbody td:nth-child(1) { text-align: left; } /* 제출 파일명은 좌측 정렬 */
+
+
+/* ===== 전체 코드 모달 ===== */
+#fullcode-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1200;
+  display: none;
+}
+#fullcode-modal{
+  position: absolute;
+  left: 50%;
+  top: 6vh;
+  transform: translateX(-50%);
+  width: min(1200px, 92vw);
+  height: min(88vh, 900px);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 16px 44px rgba(0,0,0,.25);
+  overflow: hidden;          /* 헤더/바디 분리 스크롤 */
+  display: flex;
+  flex-direction: column;
+}
+.fc-header{
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb; background: #f8fafc;
+}
+.fc-title{ margin: 0; font-size: 1.05rem; }
+.fc-toolbar{
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px; border-bottom: 1px solid #e5e7eb; background: #fff;
+}
+.fc-body{ flex: 1; overflow: auto; padding: 16px; }
+.fc-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.fc-col h4{ margin: 8px 0; }
+.fc-entity{ border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; background: #fafafa; margin-bottom: 12px; }
+.fc-entity > summary{ cursor: pointer; font-weight: 600; }
+.fc-stack{ margin: 8px 0; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.fc-hat{ font-weight: 700; margin-bottom: 6px; }
+.fc-btn{ background: #4b5563; color: #fff; border: 0; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.fc-btn:hover{ background: #374151; }
+@media (max-width: 900px){
+  #fullcode-modal{ width: 96vw; height: 90vh; }
+  .fc-grid{ grid-template-columns: 1fr; }
+}
+
+
     </style>
   </head>
   <body>
@@ -398,6 +501,8 @@ button:hover {
       <th>풀이시간(초)</th>
       <th>오류</th>
       <th>문제</th>  <!-- 문제 버튼 위치 이동 -->
+        <th>전체코드</th> <!-- 👈 추가 -->
+
     </tr>
   </thead>
   <tbody>
@@ -416,11 +521,19 @@ button:hover {
         <button onclick='showPdf({{ r.문제PDF | tojson }}, {{ r.시작페이지 | default(1) }})'>📄 문제 보기</button>
         {% else %}-{% endif %}
       </td>
+      <!-- tbody 행 내부 -->
+    <td>
+      <button onclick="openFullCode({{ loop.index0 }})">🧩 전체 코드</button>
+    </td>
     </tr>
 
     {% if r.오류내용 %}
-    <tr class="error-detail-row" style="display: none">
+    <!-- <tr class="error-detail-row" style="display: none">
       <td colspan="5">{{ r.오류내용 | safe }}</td>
+    </tr> -->
+    <!-- 변경 후 -->
+    <tr class="error-detail-row" style="display: none">
+      <td colspan="6" class="error-detail-cell">{{ r.오류내용 | safe }}</td>
     </tr>
     {% endif %}
     {% endfor %}
@@ -437,7 +550,79 @@ button:hover {
   </div>
 </div>
 
+<!-- 결과 JSON 임베드 -->
+<script id="fullcode-data" type="application/json">{{ fullcode_json|safe }}</script>
+
+<!-- 전체 코드 모달 -->
+<!-- 교체 후 -->
+<div id="fullcode-overlay">
+  <div id="fullcode-modal">
+    <div class="fc-header">
+      <h3 class="fc-title">전체 코드 보기</h3>
+      <button class="fc-btn" onclick="document.getElementById('fullcode-overlay').style.display='none'">닫기 ✕</button>
+    </div>
+    <div class="fc-toolbar">
+      <!-- <label><input type="checkbox" id="fc-only-diff"> 차이 스택만</label>
+      <label><input type="checkbox" id="fc-render-blocks"> 블록 그림으로 보기(느릴 수 있음)</label> -->
+    </div>
+    <div class="fc-body">
+      <div id="fullcode-content"></div>
+    </div>
+  </div>
+</div>
+
+
     <script>
+const FULL = JSON.parse(document.getElementById('fullcode-data').textContent || "[]");
+
+function openFullCode(idx){
+  const payload = FULL[idx];
+  if(!payload){ return; }
+
+  const wrap = document.getElementById('fullcode-content');
+  wrap.innerHTML = renderCompare(payload);
+  document.getElementById('fullcode-overlay').style.display = 'block';
+}
+
+function renderCompare(data){
+  const left  = renderSide("정답",  data.answer);
+  const right = renderSide("제출",  data.submit);
+  return `
+    <div class="fc-grid">
+      ${left}
+      ${right}
+    </div>`;
+}
+
+function renderSide(title, proj){
+  const sec = [];
+  sec.push(`<div><h4 style="margin:8px 0;">${title}</h4>`);
+
+  // Stage
+  sec.push(renderEntity("무대(Stage)", proj.stage));
+
+  // Sprites
+  const names = Object.keys(proj.sprites || {});
+  for(const n of names){
+    sec.push(renderEntity(`스프라이트: ${n}`, proj.sprites[n]));
+  }
+  sec.push(`</div>`);
+  return sec.join("");
+}
+
+function renderEntity(name, stacks){
+  if(!stacks || !stacks.length){ return `<details open><summary>${name}</summary><div style="color:#888;">(스택 없음)</div></details>`; }
+  const items = stacks.map((s, i) => `
+    <div style="margin:8px 0; padding:8px; border:1px solid #ddd; border-radius:8px;">
+      <div style="font-weight:600; margin-bottom:6px;">${s.hat}</div>
+      <div class="stack-html">${s.html}</div>
+    </div>
+  `).join("");
+  return `<details open><summary>${name} (${stacks.length})</summary>${items}</details>`;
+}
+
+
+
 function showPdf(pdfPath, page) {
   const overlay = document.getElementById("pdf-overlay");
   const frame = document.getElementById("pdf-frame");
@@ -501,14 +686,37 @@ function hidePdf() {
         bar.style.background = gradient;
       });
 
-                          function toggleDetail(button) {
-                            const row = button.closest("tr").nextElementSibling;
-                            if (!row || !row.classList.contains("error-detail-row")) return;
+  function fixErrorTables(scope){
+    var tables = scope.querySelectorAll('table');
+    tables.forEach(function(t){
+      // 강제 스타일(혹시 CSS가 이겨내지 못하면 JS로도 보정)
+      t.style.tableLayout = 'fixed';
+      t.style.width = '100%';
 
-                            const visible = row.style.display === "table-row";
-                            row.style.display = visible ? "none" : "table-row";
-                            button.textContent = visible ? "오류 보기 🔍" : "오류 닫기 🔒";
-                          }
+      // colgroup이 없으면 50/50 colgroup 주입 (브라우저가 더 확실히 고정)
+      if(!t.querySelector('colgroup')){
+        var cg = document.createElement('colgroup');
+        var c1 = document.createElement('col'); c1.style.width = '50%';
+        var c2 = document.createElement('col'); c2.style.width = '50%';
+        cg.appendChild(c1); cg.appendChild(c2);
+        t.insertBefore(cg, t.firstChild);
+      }
+    });
+  }
+
+  function toggleDetail(button) {
+    const row = button.closest("tr").nextElementSibling;
+    if (!row || !row.classList.contains("error-detail-row")) return;
+
+    const visible = row.style.display === "table-row";
+    row.style.display = visible ? "none" : "table-row";
+    button.textContent = visible ? "🔍 오류 보기" : "🔒 오류 닫기";
+
+    if(!visible){
+      // ✅ 열 때 한 번 보정
+      fixErrorTables(row);
+    }
+  }
     </script>
 
 

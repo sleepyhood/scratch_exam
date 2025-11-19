@@ -254,6 +254,17 @@ class ExamSelector(tk.Tk):
             self, text="시험 회차를 선택하세요", font=("맑은 고딕", 13, "bold")
         ).pack(pady=10)
 
+                # ✅ 시험 회차 콤보박스를 크게 보이도록 스타일 지정
+        style = ttk.Style(self)
+        style.configure(
+            "Big.TCombobox",
+            font=("맑은 고딕", 14),      # 드롭다운/입력창 글꼴 키우기
+            padding=(8, 6, 24, 6),       # 좌/상/우/하 여백
+        )
+
+        # ✅ 드롭다운 리스트(각 회차 줄)의 글꼴도 같이 키우기
+        self.option_add("*TCombobox*Listbox.font", ("맑은 고딕", 14))
+
         # style.configure(
         #     "Custom.TCombobox", font=("맑은 고딕", 13), padding=5  # 입력창 폰트
         # )
@@ -261,10 +272,11 @@ class ExamSelector(tk.Tk):
             self,
             textvariable=self.exam_round_var,
             state="disabled",
-            font=("맑은 고딕", 12),
-            width=30,
+            style="Big.TCombobox",      # ✅ 위에서 만든 스타일 사용
+            width=28,                   # 살짝 줄여도 여백 때문에 더 커 보임
         )
-        self.exam_round_combo.pack(pady=5)
+        self.exam_round_combo["height"] = 8   # ✅ 한 번에 보이는 줄 수 (필요시 조절)
+        self.exam_round_combo.pack(pady=8)
 
         btn_style = {
             "bg": "#007BFF",  # 파란색

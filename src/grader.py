@@ -8,6 +8,8 @@ import pprint
 import html
 
 from scratch_parser import interpret_block
+from scratch_parser import dump_full_code   # 새로 추가한 유틸 임포트
+
 import traceback
 
 import re
@@ -485,6 +487,8 @@ def grade_from_meta(meta_path):
             print(f"s_json: {s_json}")
             a_json = extract_json_from_sb2(matched_answer)
             print(f"a_json: {a_json}")
+            full_submit = dump_full_code(s_json)
+            full_answer = dump_full_code(a_json)
 
         except Exception as e:
             results.append({"오류내용": f"[project.json 추출 실패] {e}"})
@@ -520,6 +524,7 @@ def grade_from_meta(meta_path):
                     "정답여부": "O",
                     "문제PDF": pdf_full_path,
                     "시작페이지": i + 1,
+                    "_fullcode": { "submit": full_submit, "answer": full_answer },
                 })
             else:
                 # ❌ 차이가 있으면 오답
@@ -531,6 +536,7 @@ def grade_from_meta(meta_path):
                     "오류내용": "; ".join(diff_errors),
                     "문제PDF": pdf_full_path,
                     "시작페이지": i + 1,
+                    "_fullcode": { "submit": full_submit, "answer": full_answer },
                 })
 
         except Exception as e:
@@ -544,7 +550,8 @@ def grade_from_meta(meta_path):
                     "정답여부": "오류",
                     "오류내용": f"[normalize or compare 중 오류] {e}\n{tb}",
                     "문제PDF": pdf_full_path,  # 🔍 추가된 항목
-                        "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+                    "시작페이지": i + 1,  # ← 1번부터 시작하도록 인덱스 + 1
+                    "_fullcode": { "submit": full_submit, "answer": full_answer },
 
                 }
             )

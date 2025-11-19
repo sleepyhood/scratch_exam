@@ -1,3 +1,4 @@
+import re
 BLOCK_CLASS_MAP = {
     #
     # 동작
@@ -35,6 +36,7 @@ BLOCK_CLASS_MAP = {
     "goBackByLayers:": "cmd-looks",
     "comrToFront": "cmd-looks",
     "startScene":  "cmd-looks",
+    "comeToFront": "cmd-looks",   # 맨 앞으로 순서 바꾸기
 
     #
     # 소리
@@ -91,6 +93,7 @@ BLOCK_CLASS_MAP = {
     "setVideoState": "cmd-sensing",
     "getAttribute:of:": "cmd-sensing",
     "timeAndDate": "cmd-sensing",
+    "doAsk": "cmd-sensing",       # ( ... ) 묻고 기다리기
     #
     # 데이터 - 변수
     "setVar:to:": "cmd-data",
@@ -113,9 +116,18 @@ BLOCK_CLASS_MAP = {
     # 추가 블록
     "call": "cmd-additional",
     "getParam": "cmd-additional",
+    "procDef": "cmd-additional",  # 나만의 블록 정의 (정의하기)
     # 필요시 더 추가
 }
 
+HAT_OPS = {
+    "whenGreenFlag",
+    "whenClicked",
+    "whenIReceive",
+    "whenKeyPressed",
+    "whenSensorGreaterThan",
+    "whenCloned",
+}
 
 # 피연산자가 올바른 수식인지 확인
 def isCorrectOperand(left, right):
@@ -200,6 +212,7 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
     elif opcode == "readVariable":
         var_name = interpret_block(args[0], depth)
         return f"<span class='{css_class}'>{var_name}</span>"
+
 
     # 연산: 더하기
     elif opcode == "+":
@@ -506,6 +519,15 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         target = "벽" if target == "_edge_" else target
         return f"<span class='{css_class}'>{target}에 닿았는가?</span>"
 
+    elif opcode == "doAsk":
+        # block[1] : 질문 문자열
+        question_raw = block[1] if len(block) > 1 else ""
+        question = interpret_block(question_raw)
+        question_disp = highlight_if_constant(question, question_raw)
+        # 묻고 기다리기
+        return f"<span class='{css_class}'>({question_disp}) 묻고 기다리기</span><br/>"
+
+
     # 감지: 색깔 감지
     elif opcode == "touchingColor:":
         color_raw = block[1]
@@ -536,6 +558,9 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
         costume = interpret_block(block[1])
         return f"의상을 {costume}(으)로 바꾸기"
 
+    elif opcode == "comeToFront":
+            return f"<span class='{css_class}'>맨 앞으로 순서 바꾸기</span><br/>"
+    
     # 크기 설정
     elif opcode == "setSizeTo:":
         size_raw = block[1]
@@ -1005,6 +1030,31 @@ def interpret_block(block, depth=0, highlight_paths=None, current_path=None):
 
         #     tmp += " "
 
+    elif opcode == "procDef":
+        # Scratch 2 형식: ["procDef", spec, [argNames], [defaults], ...]
+        spec = block[1] if len(block) > 1 else ""
+        arg_names = block[2] if len(block) > 2 and isinstance(block[2], list) else []
+
+        # spec에서 %n, %s, %b 같은 자리표시자를 제거하여 블록 이름 추출
+        title = re.sub(r'%[A-Za-z]', '', str(spec)).strip()
+        title = re.sub(r'\s+', ' ', title)  # 중복 공백 정리
+
+        # 파라미터 표시 (예: (N), 여러 개면 쉼표로)
+        params = []
+        for nm in arg_names:
+            if isinstance(nm, str):
+                n = nm.strip()
+                if n and n not in ("빈 블록",):
+                    params.append(n)
+
+        head = f"정의하기 [{title}]"
+        if params:
+            head += " (" + ", ".join(params) + ")"
+
+        # 헤더만 반환 (wrapper는 _blocks_to_html에서 build)
+        return f"<span class='block roof-block'>{head}</span><br/>"
+
+
     # 논리 연산: NOT
     elif opcode == "not":
         operand = interpret_block(block[1])
@@ -1081,3 +1131,96 @@ def flatten_blocks(blocks):
 
 
 # type: ignore
+
+
+# scratch_parser.py (맨 아래에 추가)
+def _blocks_to_html(blocks):
+    # blocks: 한 스택의 블록 리스트
+
+    # ✅ 커스텀 블록 정의 스택(wrapper 처리: 첫 블록 제외)
+    if blocks and isinstance(blocks[0], list) and blocks[0] and blocks[0][0] == "procDef":
+        try:
+            spec = blocks[0][1] if len(blocks[0]) > 1 else ""
+            arg_names = blocks[0][2] if len(blocks[0]) > 2 and isinstance(blocks[0][2], list) else []
+        except Exception:
+            spec, arg_names = "", []
+
+        title = re.sub(r'%[A-Za-z]', '', str(spec)).strip()
+        title = re.sub(r'\s+', ' ', title)
+        params = []
+        for nm in arg_names or []:
+            if isinstance(nm, str):
+                n = nm.strip()
+                if n and n not in ("빈 블록",):
+                    params.append(n)
+
+        head = "정의하기 [" + title + "]"
+        if params:
+            head += " (" + ", ".join(params) + ")"
+
+        # 바디 = 첫 블록(procDef) 이후만
+        inner_parts = []
+        for b in blocks[1:]:
+            try:
+                inner_parts.append(interpret_block(b))
+            except Exception:
+                inner_parts.append("<code>…</code>")
+        inner_html = "".join(inner_parts)
+
+        return (
+            "<div class='block-wrapper cmd-additional'>"
+            "<div class='block-header'>" + head + "</div>"
+            "<div class='block-body'>" + inner_html + "</div>"
+            "</div>"
+        )
+
+    # ✅ 일반 스택: 첫 블록이 헤더(HAT_OPS)이면 본문에서 제외
+    start_idx = 0
+    if blocks and isinstance(blocks[0], list):
+        op0 = blocks[0][0] if blocks[0] else None
+        if op0 in HAT_OPS:
+            start_idx = 1
+
+    parts = []
+    for b in blocks[start_idx:]:
+        try:
+            parts.append(interpret_block(b))
+        except Exception:
+            parts.append(f"<code>{b[0] if isinstance(b, list) and b else ''}</code>")
+    return "".join(parts)
+
+
+
+def dump_full_code(project_json: dict) -> dict:
+    def collect(obj):
+        stacks = []
+        for s in (obj.get("scripts") or []):
+            if isinstance(s, list) and len(s) >= 3 and isinstance(s[2], list):
+                blocks = s[2]
+                hat_html = ""
+                if blocks and isinstance(blocks[0], list) and blocks[0]:
+                    op0 = blocks[0][0]
+                    if op0 in HAT_OPS:
+                        # 헤더는 모달 상단에만 표기
+                        try:
+                            hat_html = interpret_block(blocks[0]) or ""
+                        except Exception:
+                            hat_html = "<code>…</code>"
+                    elif op0 == "procDef":
+                        # 정의하기는 보라 wrapper만 보여주고, 노란 hat은 숨김
+                        hat_html = ""
+
+                stacks.append({
+                    "hat": hat_html or "<code>(no hat)</code>",
+                    "html": _blocks_to_html(blocks),  # 본문에서는 헤더/정의 제거되어 렌더
+                })
+        return stacks
+
+    out = {"stage": collect(project_json)}
+    sprites = {}
+    for child in project_json.get("children", []):
+        name = child.get("objName")
+        if name:
+            sprites[name] = collect(child)
+    out["sprites"] = sprites
+    return out
