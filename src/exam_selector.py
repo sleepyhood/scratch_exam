@@ -47,6 +47,120 @@ def _save_config(self):
             pass
     _fallback_save_config_to_userfile(self.config)
 
+
+def _extract_retry_candidates(meta_path):
+    """meta.json을 기준으로 오답 문제 목록과 매핑 진단 정보를 반환한다."""
+    from grader import grade_from_meta, normalize_name
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    all_sb2 = meta.get("sb2_files") or []
+    if not all_sb2:
+        raise ValueError("meta.json에 sb2_files 정보가 없습니다.")
+
+    results = grade_from_meta(meta_path)
+
+    wrong_keys = []
+    for row in results:
+        if row.get("정답여부") == "O":
+            continue
+
+        submit_path = row.get("제출파일경로")
+        if not submit_path:
+            continue
+
+        wrong_keys.append(normalize_name(Path(submit_path).stem))
+
+    unique_wrong_keys = []
+    seen = set()
+    for key in wrong_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_wrong_keys.append(key)
+
+    sb2_by_key = {}
+    duplicate_problem_keys = set()
+    for sb2_path in all_sb2:
+        problem_key = normalize_name(Path(sb2_path).stem)
+        if problem_key in sb2_by_key:
+            duplicate_problem_keys.add(problem_key)
+            continue
+        sb2_by_key[problem_key] = sb2_path
+
+    matched_sb2 = []
+    matched_original_indices = []
+    unmatched_keys = []
+    for key in unique_wrong_keys:
+        matched = sb2_by_key.get(key)
+        if matched:
+            matched_sb2.append(matched)
+            matched_original_indices.append(all_sb2.index(matched))
+        else:
+            unmatched_keys.append(key)
+
+    diagnostics = {
+        "results": results,
+        "wrong_keys": unique_wrong_keys,
+        "unmatched_keys": unmatched_keys,
+        "duplicate_problem_keys": sorted(duplicate_problem_keys),
+        "all_sb2_count": len(all_sb2),
+        "matched_original_indices": matched_original_indices,
+    }
+    return meta, matched_sb2, diagnostics
+
+
+def _safe_path_component(text, fallback="untitled"):
+    cleaned = "".join("_" if ch in '<>:"/\\|?*' else ch for ch in str(text or ""))
+    cleaned = cleaned.strip().rstrip(".")
+    return cleaned or fallback
+
+
+def _create_wrong_retry_session(meta_path, meta, wrong_sb2, diagnostics):
+    """오답 재도전용 새 제출 세션 폴더와 meta.json을 만든다."""
+    source_submission_dir = Path(meta.get("submission_dir") or meta_path.parent)
+    if not source_submission_dir.exists():
+        raise ValueError(f"submission_dir 경로가 존재하지 않습니다:\n{source_submission_dir}")
+    if not wrong_sb2:
+        raise ValueError("오답 재도전 대상으로 만들 문제가 없습니다.")
+
+    username = meta.get("username", "미입력")
+    exam_round_name = meta.get("exam_round_name", "미지정")
+    date_str = datetime.now().strftime("%Y%m%d")
+    safe_username = _safe_path_component(username, fallback="user")
+    safe_exam_round_name = _safe_path_component(exam_round_name, fallback="exam")
+    base_name = f"{safe_username}_{safe_exam_round_name}_{date_str}_오답재도전"
+
+    retry_submission_dir = source_submission_dir.parent / base_name
+    for i in count(1):
+        if not retry_submission_dir.exists():
+            break
+        retry_submission_dir = source_submission_dir.parent / f"{base_name}_{i}"
+
+    retry_submission_dir.mkdir(parents=True, exist_ok=False)
+
+    retry_meta = {
+        "exam_round_name": f"{exam_round_name} (오답만)",
+        "username": username,
+        "date": date_str,
+        "pdf_path": meta.get("pdf_path"),
+        "sb2_files": [str(path) for path in wrong_sb2],
+        "answer_folder": meta.get("answer_folder"),
+        "submission_dir": str(retry_submission_dir),
+        "source_meta_path": str(meta_path),
+        "source_submission_dir": str(source_submission_dir),
+        "retry_mode": "wrong_only",
+        "wrong_problem_keys": diagnostics["wrong_keys"],
+        "pdf_page_indices": diagnostics["matched_original_indices"],
+    }
+
+    retry_meta_path = retry_submission_dir / "meta.json"
+    with open(retry_meta_path, "w", encoding="utf-8") as f:
+        json.dump(retry_meta, f, indent=4, ensure_ascii=False)
+
+    return retry_meta_path, retry_submission_dir, retry_meta
+
 def _open_settings_menu(self):
     menu = tk.Menu(self, tearoff=0)
     menu.add_command(label="시험 폴더 경로 설정…", command=self._pick_exam_base_path)
@@ -190,7 +304,8 @@ class ExamSelector(tk.Tk):
         self.config = config
         self._save_config_func = None
 
-        self.submission_meta_path = None  # ✅ 제출본 경로 저장용
+        # ✅ 마지막 응시 meta.json 위치 기억 (시험 재개용)
+        self.submission_meta_path = self.config.get("last_submission_meta_path")
 
         # 창 크기
         window_width = 480
@@ -288,6 +403,28 @@ class ExamSelector(tk.Tk):
             "width": 20,
         }
 
+        # self.start_btn = tk.Button(
+        #     self,
+        #     text="시험 시작",
+        #     state="disabled",
+        #     command=self.confirm_start,
+        #     **btn_style,
+        #     cursor="hand2",  # 👈 마우스 오버 시 손모양
+        # )
+        # self.start_btn.pack(pady=20)
+
+        # regrade_btn_style = btn_style.copy()
+        # regrade_btn_style["bg"] = "#28a745"  # 녹색
+        # regrade_btn_style["activebackground"] = "#1e7e34"
+
+        # self.regrade_btn = tk.Button(
+        #     self,
+        #     text="재채점 실행",
+        #     command=self.select_folder_for_regrade,
+        #     **regrade_btn_style,
+        # )
+        # self.regrade_btn.pack(pady=10)
+
         self.start_btn = tk.Button(
             self,
             text="시험 시작",
@@ -297,6 +434,19 @@ class ExamSelector(tk.Tk):
             cursor="hand2",  # 👈 마우스 오버 시 손모양
         )
         self.start_btn.pack(pady=20)
+
+        # ✅ 시험 재개 버튼 (기존 meta.json 기준으로 이어하기)
+        resume_btn_style = btn_style.copy()
+        resume_btn_style["bg"] = "#6c757d"
+        resume_btn_style["activebackground"] = "#5a6268"
+
+        self.resume_btn = tk.Button(
+            self,
+            text="시험 재개하기",
+            command=self.resume_exam_dialog,
+            **resume_btn_style,
+        )
+        self.resume_btn.pack(pady=5)
 
         regrade_btn_style = btn_style.copy()
         regrade_btn_style["bg"] = "#28a745"  # 녹색
@@ -309,6 +459,21 @@ class ExamSelector(tk.Tk):
             **regrade_btn_style,
         )
         self.regrade_btn.pack(pady=10)
+
+        # ✅ 틀린 문제만 다시 풀기 버튼
+        wrong_btn_style = btn_style.copy()
+        wrong_btn_style["bg"] = "#ffc107"
+        wrong_btn_style["fg"] = "black"
+        wrong_btn_style["activebackground"] = "#e0a800"
+
+        self.retry_wrong_btn = tk.Button(
+            self,
+            text="틀린 문제만 다시 풀기",
+            command=self.retry_wrong_only_dialog,
+            **wrong_btn_style,
+        )
+        self.retry_wrong_btn.pack(pady=5)
+
         self.bind("<Return>", lambda e: self._try_start())
         self.bind_all("<Alt-Left>", lambda e: self.show_exam_types())
         self._starting = False
@@ -345,6 +510,205 @@ class ExamSelector(tk.Tk):
         return dlg.value
 
 
+    def resume_exam_dialog(self):
+        """기존 meta.json을 기준으로 시험을 다시 여는 기능 (시험 재개하기)"""
+        from tkinter import filedialog
+
+        meta_path = None
+
+        # 1) config에 저장된 마지막 시험 meta.json이 있으면 먼저 물어보기
+        last_meta = self.submission_meta_path or self.config.get("last_submission_meta_path")
+        if last_meta and Path(last_meta).exists():
+            if messagebox.askyesno(
+                "시험 재개",
+                f"마지막 응시 기록을 다시 여시겠습니까?\n\n{last_meta}",
+                parent=self,
+            ):
+                meta_path = Path(last_meta)
+
+        # 2) 위에서 사용하지 않으면 직접 meta.json 선택
+        if meta_path is None:
+            pick = filedialog.askopenfilename(
+                title="재개할 시험의 meta.json 선택",
+                filetypes=[("JSON 파일", "*.json")],
+            )
+            if not pick:
+                return
+            meta_path = Path(pick)
+
+        # 3) meta.json 로드
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        except Exception as e:
+            messagebox.showerror("오류", f"meta.json 읽기 실패: {e}", parent=self)
+            return
+
+        pdf_path = meta.get("pdf_path")
+        sb2_files = meta.get("sb2_files") or []
+        submission_dir = Path(meta.get("submission_dir") or meta_path.parent)
+        exam_round_name = meta.get("exam_round_name", "미지정")
+        username = meta.get("username", "미입력")
+
+        if not pdf_path or not sb2_files:
+            messagebox.showerror("오류", "meta.json에 pdf_path / sb2_files 정보가 부족합니다.", parent=self)
+            return
+        if not submission_dir.exists():
+            messagebox.showerror("오류", f"제출 폴더가 존재하지 않습니다:\n{submission_dir}", parent=self)
+            return
+
+        state_path = submission_dir / "exam_state.json"
+        if not state_path.exists():
+            messagebox.showerror(
+                "시험 재개",
+                "저장된 진행 상태(exam_state.json)가 없어 시험을 재개할 수 없습니다.",
+                parent=self,
+            )
+            return
+
+        # ✅ meta.json 안에 total_time이 있으면 이미 종료된 시험으로 판단
+        if "total_time" in meta:
+            messagebox.showinfo(
+                "시험 재개",
+                "이미 종료된 시험은 재개할 수 없습니다. 필요하면 재채점 기능을 사용하세요.",
+                parent=self,
+            )
+            return
+
+        problem_folder = os.path.dirname(sb2_files[0])
+
+        # meta 경로 저장
+        self.submission_meta_path = str(meta_path)
+        self.config["last_submission_meta_path"] = self.submission_meta_path
+        self._save_config()
+
+        if not messagebox.askokcancel(
+            "시험 재개",
+            f"{username} 님의 '{exam_round_name}' 시험을 재개합니다.\n\n제출 폴더:\n{submission_dir}",
+            parent=self,
+        ):
+            return
+
+        # ✅ 기존 제출 폴더를 그대로 사용해서 ExamApp 실행
+        self.destroy()
+        app = ExamApp(
+            pdf_path,
+            sb2_files,
+            problem_folder,
+            submission_dir=submission_dir,
+            exam_round_name=exam_round_name,
+            username=username,
+            pdf_page_indices=meta.get("pdf_page_indices"),
+        )
+        app.mainloop()
+
+    def retry_wrong_only_dialog(self):
+        """
+        기존 제출 폴더에서 '틀린 문제만' 다시 푸는 모드
+        - 제출폴더를 고르면 meta.json을 기준으로 채점 → 오답만 모아서 ExamApp 실행
+        """
+        from tkinter import filedialog
+        from pathlib import Path
+
+        folder = filedialog.askdirectory(title="틀린 문제만 다시 풀 제출 폴더 선택")
+        if not folder:
+            return
+        folder = Path(folder)
+
+        meta_path = folder / "meta.json"
+        if not meta_path.exists():
+            messagebox.showerror("오류", "선택한 폴더에 meta.json이 없습니다.", parent=self)
+            return
+
+        # 1) 오답 문제 목록 계산
+        try:
+            meta, wrong_sb2, diagnostics = _extract_retry_candidates(meta_path)
+        except Exception as e:
+            tb = traceback.format_exc()
+            messagebox.showerror("오류", f"채점 중 오류 발생: {e}\n{tb}", parent=self)
+            return
+
+        # 2) 오답이 없으면 바로 종료
+        if not diagnostics["wrong_keys"]:
+            messagebox.showinfo("안내", "틀린 문제가 없습니다. 전부 정답입니다.", parent=self)
+            return
+
+        # 3) 오답 문제와 원본 문제 파일의 매핑 이상을 먼저 차단
+        if diagnostics["duplicate_problem_keys"]:
+            joined = "\n".join(diagnostics["duplicate_problem_keys"][:10])
+            messagebox.showerror(
+                "오류",
+                "문제 파일 이름이 중복되어 오답 문제를 안정적으로 찾을 수 없습니다.\n"
+                f"{joined}",
+                parent=self,
+            )
+            return
+
+        if diagnostics["unmatched_keys"]:
+            joined = "\n".join(diagnostics["unmatched_keys"][:10])
+            messagebox.showerror(
+                "오류",
+                "오답과 문제 파일을 매칭하지 못했습니다.\n"
+                "파일 이름 규칙이 바뀌었는지 확인해주세요.\n\n"
+                f"{joined}",
+                parent=self,
+            )
+            return
+
+        # 4) 오답 재도전용 새 세션 생성
+        try:
+            retry_meta_path, retry_submission_dir, retry_meta = _create_wrong_retry_session(
+                meta_path,
+                meta,
+                wrong_sb2,
+                diagnostics,
+            )
+        except Exception as e:
+            tb = traceback.format_exc()
+            messagebox.showerror("오류", f"오답 재도전 세션 생성 중 오류 발생: {e}\n{tb}", parent=self)
+            return
+
+        pdf_path = retry_meta.get("pdf_path")
+        exam_round_name = retry_meta.get("exam_round_name", "미지정")
+        username = retry_meta.get("username", "미입력")
+        problem_folder = os.path.dirname(wrong_sb2[0])
+
+        # 마지막 확인
+        if not messagebox.askokcancel(
+            "틀린 것만 다시 풀기",
+            f"{username} 님의 '{exam_round_name}' 시험에서\n"
+            f"{len(wrong_sb2)}개 문항만 다시 풉니다.\n\n"
+            f"새 제출 폴더:\n{retry_submission_dir}",
+            parent=self,
+        ):
+            try:
+                shutil.rmtree(retry_submission_dir)
+            except Exception:
+                pass
+            return
+
+        # 5) 오답에 해당하는 문제들만 sb2 리스트로 넘겨서 ExamApp 실행
+        self.submission_meta_path = str(retry_meta_path)
+        self.config["last_submission_meta_path"] = self.submission_meta_path
+        self._save_config()
+
+        self.destroy()
+        app = ExamApp(
+            pdf_path,
+            wrong_sb2,
+            problem_folder,
+            submission_dir=retry_submission_dir,
+            exam_round_name=exam_round_name,
+            username=username,
+            load_state=False,  # ✅ 오답 전용 모드는 이전 exam_state.json을 무시
+            pdf_page_indices=retry_meta.get("pdf_page_indices"),
+
+        )
+        app.mainloop()
+
+
+
+
     def select_folder_for_regrade(self):
         from tkinter import filedialog
         from grader import regrade_submission_folder
@@ -359,6 +723,8 @@ class ExamSelector(tk.Tk):
         except Exception as e:
             tb = traceback.format_exc()
             messagebox.showerror("오류", f"재채점 중 오류 발생: {e}\n{tb}")
+
+
 
     def get_exam_types(self):
         return [
@@ -558,6 +924,11 @@ class ExamSelector(tk.Tk):
         meta_path = self.submission_dir / "meta.json"
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4, ensure_ascii=False)
+
+        # ✅ 방금 생성한 meta.json 경로를 기억해 두었다가 '시험 재개하기'에서 사용
+        self.submission_meta_path = str(meta_path)
+        self.config["last_submission_meta_path"] = self.submission_meta_path
+        self._save_config()
 
 
 # ---- 클래스 바깥 전역에 정의된 함수들을 ExamSelector 메서드로 바인딩 ----

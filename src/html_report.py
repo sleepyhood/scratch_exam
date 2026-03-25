@@ -18,6 +18,38 @@ def format_time(seconds):
     minutes = int(seconds) // 60
     secs = int(seconds) % 60
     return f"{minutes}분 {secs}초"
+# ===== JSON 정렬/표준화 유틸 =====
+def _try_parse_json(x):
+    # dict/list면 그대로, 문자열이면 JSON으로 파싱 시도
+    if isinstance(x, (dict, list)):
+        return x
+    if isinstance(x, str):
+        try:
+            return json.loads(x)
+        except Exception:
+            return x  # 그냥 텍스트 코드면 원문 유지
+    return x
+
+def _canonicalize(obj):
+    # dict: 키 정렬 + 재귀
+    if isinstance(obj, dict):
+        return {k: _canonicalize(obj[k]) for k in sorted(obj)}
+    # list: 원소가 dict들이고 공통 키가 있으면 그 키 기준으로 정렬
+    if isinstance(obj, list):
+        if all(isinstance(el, dict) for el in obj) and len(obj) > 1:
+            for key in ["name","id","idx","index","order","opcode","target","type"]:
+                if all(key in el for el in obj):
+                    return [_canonicalize(el) for el in sorted(obj, key=lambda d: str(d.get(key)))]
+        return [_canonicalize(el) for el in obj]
+    return obj
+
+def to_pretty_sorted_json(x):
+    y = _try_parse_json(x)
+    if isinstance(y, (dict, list)):
+        y = _canonicalize(y)
+        return json.dumps(y, ensure_ascii=False, indent=2, sort_keys=True)
+    # dict/list가 아니면(그냥 코드 텍스트 등) 원문을 반환
+    return "" if y is None else str(y)
 
 #def save_results_as_html(results, meta_path=None, output_filename=None, regrade_mode=False):
 def save_results_as_html(results, meta_path=None, regrade_mode=False, output_filename=None):
@@ -69,7 +101,12 @@ def save_results_as_html(results, meta_path=None, regrade_mode=False, output_fil
 
     output_path = desktop / filename
     print(f"output_path: {output_path}")
-    fullcode_blob = [r.get("_fullcode", None) for r in results]
+    # 전체코드: 항목별로 "정렬+예쁘게" 만든 문자열 리스트
+    fullcode_blob_sorted = [to_pretty_sorted_json(r.get("_fullcode")) for r in results]
+
+    # (선택) 행 단위로도 바로 쓰고 싶으면 각 결과에 넣어 둠
+    for i, r in enumerate(results):
+        r["전체코드(정렬)"] = fullcode_blob_sorted[i]
 
     html = template.render(
         results=results,
@@ -77,9 +114,10 @@ def save_results_as_html(results, meta_path=None, regrade_mode=False, output_fil
         today=today,
         total_time_str=format_time(total_time),
         regrade_count=regrade_count,
-        fullcode_json=json.dumps(fullcode_blob, ensure_ascii=False)  # 👈 추가
-
+        # 템플릿에서 기존처럼 JS로 파싱해 쓰는 경우를 위해 JSON 문자열로 전달
+        fullcode_json=json.dumps(fullcode_blob_sorted, ensure_ascii=False)
     )
+
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)

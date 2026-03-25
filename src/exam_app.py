@@ -304,6 +304,9 @@ class ExamApp(tk.Tk):
         submission_dir,
         exam_round_name="미지정",
         username="미입력",
+        load_state=True,   # ✅ 추가: 상태 복구 여부
+        pdf_page_indices=None,
+
     ):
 
         # PyInstaller 환경에서는 sys._MEIPASS 경로 사용
@@ -316,6 +319,12 @@ class ExamApp(tk.Tk):
         self.submission_dir = submission_dir
         self.skipped_pages = []
         self.submitted_pages = []
+        if pdf_page_indices is None:
+            self.pdf_page_indices = list(range(len(sb2_files)))
+        else:
+            self.pdf_page_indices = [int(idx) for idx in pdf_page_indices]
+            if len(self.pdf_page_indices) != len(sb2_files):
+                raise ValueError("pdf_page_indices 길이가 sb2_files와 일치해야 합니다.")
         
         self.PDF_MIN_ZOOM = 0.8     # 80%
         self.PDF_MAX_ZOOM = 2.0     # 200%
@@ -337,21 +346,55 @@ class ExamApp(tk.Tk):
         # self.save_meta(pdf_path, sb2_files, answer_folder)
 
         # 시간 기록
+        # self.page_start_time = None  # 현재 문제 풀이 시작 시간
+        # self.time_log = {}  # 문제 번호 → 누적 시간(초)
+
+        # # 상태 복구
+        # if os.path.exists("exam_state.json"):
+        #     with open("exam_state.json", "r") as f:
+        #         try:
+        #             state = json.load(f)
+        #             self.submitted_pages = state.get("submitted", [])
+        #             self.skipped_pages = state.get("skipped", [])
+        #             self.current_page = state.get("current", 0)
+        #         except:
+        #             self.current_page = 0
+        # else:
+        #     self.current_page = 0
+
+                # 시간 기록
         self.page_start_time = None  # 현재 문제 풀이 시작 시간
         self.time_log = {}  # 문제 번호 → 누적 시간(초)
 
-        # 상태 복구
-        if os.path.exists("exam_state.json"):
-            with open("exam_state.json", "r") as f:
-                try:
+        # ✅ 상태 복구: 제출 폴더 안의 exam_state.json 사용 (시험 재개용)
+        self.state_path = Path(self.submission_dir) / "exam_state.json"
+        self.current_page = 0
+
+
+        # 🔧 여기에서 load_state 옵션 체크
+        if load_state and self.state_path.exists():
+            try:
+                with open(self.state_path, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                    self.submitted_pages = state.get("submitted", [])
-                    self.skipped_pages = state.get("skipped", [])
-                    self.current_page = state.get("current", 0)
-                except:
-                    self.current_page = 0
+                self.submitted_pages = state.get("submitted", [])
+                self.skipped_pages = state.get("skipped", [])
+                self.current_page = state.get("current", 0)
+
+                # time_log은 {문제번호(int): 시간(초)} 형태로 복구
+                raw_log = state.get("time_log", {})
+                self.time_log = {int(k): float(v) for k, v in raw_log.items()}
+                print(f"[STATE] 복구 완료: current={self.current_page}, "
+                      f"submitted={self.submitted_pages}, skipped={self.skipped_pages}")
+            except Exception as e:
+                print(f"[STATE] 복구 실패: {e}")
+                # 실패하면 그냥 초기 상태로 두고 진행
+                self.submitted_pages = []
+                self.skipped_pages = []
+                self.current_page = 0
+                self.time_log = {}
         else:
             self.current_page = 0
+
 
         # 1) 반드시 가장 먼저 Tk 초기화
         super().__init__()
@@ -863,16 +906,35 @@ class ExamApp(tk.Tk):
             messagebox.showinfo("알림", "Scratch에서 저장한 후, 다시 시도하세요.")
         self.attributes("-topmost", False)
 
+    # def save_state(self):
+    #     with open("exam_state.json", "w") as f:
+    #         json.dump(
+    #             {
+    #                 "submitted": self.submitted_pages,
+    #                 "skipped": self.skipped_pages,
+    #                 "current": self.current_page,
+    #             },
+    #             f,
+    #         )
+
     def save_state(self):
-        with open("exam_state.json", "w") as f:
-            json.dump(
-                {
-                    "submitted": self.submitted_pages,
-                    "skipped": self.skipped_pages,
-                    "current": self.current_page,
-                },
-                f,
-            )
+        """현재 풀이 상태를 제출 폴더 안 exam_state.json에 저장 (시험 재개용)."""
+        if not hasattr(self, "state_path"):
+            self.state_path = Path(self.submission_dir) / "exam_state.json"
+
+        payload = {
+            "submitted": self.submitted_pages,
+            "skipped": self.skipped_pages,
+            "current": self.current_page,
+            "time_log": self.time_log,
+        }
+        try:
+            with open(self.state_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            # print(f"[STATE] 저장: {self.state_path}")
+        except Exception as e:
+            print(f"[STATE] 저장 실패: {e}")
+
 
     def reset_layout(self):
         """PDF 배율을 기본값으로 초기화하고, 스크래치 창을 안전하게 재배치"""
@@ -945,11 +1007,12 @@ class ExamApp(tk.Tk):
             self.current_page = page_num
 
             # 3) PDF/라벨 업데이트
+            pdf_page_num = self.pdf_page_indices[page_num]
             self.page_label.config(
                 text=f"문제 {page_num + 1} / {len(self.sb2_files)}"
                 + (" (건너뛴 문제)" if page_num in self.skipped_pages else "")
             )
-            self.pdf_viewer.set_page(page_num)
+            self.pdf_viewer.set_page(pdf_page_num)
             self.update_zoom_label()
 
             # 4) 이전 Scratch 종료 (항상 '실행 전에')
@@ -992,6 +1055,9 @@ class ExamApp(tk.Tk):
             # 8) 시간 시작 + 버튼 상태
             self.page_start_time = time.time()
             self.update_nav_buttons()
+
+            # 9) ✅ 시험 상태 저장 (시험 재개 대비)
+            self.save_state()
         finally:
             self._launching_scratch = False
 
@@ -1070,6 +1136,13 @@ class ExamApp(tk.Tk):
         self.next_btn.config(text="종료하기", command=self.quit_app)
 
     def quit_app(self):
+        # 종료 직전에 마지막 시간/상태 저장
+        try:
+            self.save_time_spent()
+            self.save_state()
+        except Exception as e:
+            print(f"[STATE] 종료 전 저장 실패: {e}")
+
         self.destroy()  # Tkinter 종료
 
     def update_nav_buttons(self):
@@ -1098,14 +1171,47 @@ class ExamApp(tk.Tk):
             )
 
     def show_result_summary(self):
+        from pathlib import Path
+        # 채점 쪽 에러가 나도 시험창이 터지지 않게 try로 감싸기
         total = len(self.sb2_files)
         done = len(self.submitted_pages)
         skipped = len(self.skipped_pages)
+
+        # 1) 시간 정보 meta.json에 기록
         self.update_meta_with_time()
 
+        # 2) 시험 종료와 동시에 채점 + HTML 리포트 생성/열기
+        try:
+            from grader import grade_from_meta
+            from html_report import save_results_as_html
+
+            meta_path = Path(self.submission_dir) / "meta.json"
+            results = grade_from_meta(meta_path)
+
+            # 재채점 버튼에서는 regrade_mode=True로 쓰고 있으니,
+            # 여기서는 일반 종료 모드로 호출
+            try:
+                save_results_as_html(results, meta_path=meta_path, regrade_mode=False)
+            except TypeError:
+                # 혹시 regrade_mode 인자를 안 받는 버전일 수도 있으니 호환 코드
+                save_results_as_html(results, meta_path)
+        except Exception as e:
+            print(f"[시험 종료 채점/리포트 오류] {e}")
+
+        # 3) 요약 팝업
         messagebox.showinfo(
             "시험 종료", f"총 문제 수: {total}\n제출: {done}\n건너뜀: {skipped}"
         )
+
+    # def show_result_summary(self):
+    #     total = len(self.sb2_files)
+    #     done = len(self.submitted_pages)
+    #     skipped = len(self.skipped_pages)
+    #     self.update_meta_with_time()
+
+    #     messagebox.showinfo(
+    #         "시험 종료", f"총 문제 수: {total}\n제출: {done}\n건너뜀: {skipped}"
+    #     )
         # self.save_time_log()
 
     # def save_time_log(self):

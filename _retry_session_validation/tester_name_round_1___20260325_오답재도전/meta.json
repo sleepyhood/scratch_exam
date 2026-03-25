@@ -1,0 +1,17 @@
+{
+    "exam_round_name": "round:1?* (오답만)",
+    "username": "tester/name",
+    "date": "20260325",
+    "pdf_path": "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\exam.pdf",
+    "sb2_files": [
+        "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\B_problem.sb2"
+    ],
+    "answer_folder": "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\answers",
+    "submission_dir": "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\tester_name_round_1___20260325_오답재도전",
+    "source_meta_path": "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\tester_round1_20260325\\meta.json",
+    "source_submission_dir": "C:\\Users\\DCT2\\Desktop\\DCT2_공유폴더\\scratch_exam\\_retry_session_validation\\tester_round1_20260325",
+    "retry_mode": "wrong_only",
+    "wrong_problem_keys": [
+        "b"
+    ]
+}

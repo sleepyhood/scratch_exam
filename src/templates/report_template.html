@@ -573,11 +573,54 @@ tbody td:nth-child(1) { text-align: left; } /* 제출 파일명은 좌측 정렬
 
 
     <script>
+
 const FULL = JSON.parse(document.getElementById('fullcode-data').textContent || "[]");
 
+/* ===== 정렬 유틸 ===== */
+const _lc = (s)=> (s ?? '').toString().toLowerCase();
+const _locale = (a,b)=> a.localeCompare(b,'ko-KR');
+
+function sortStacks(arr){
+  if(!Array.isArray(arr)) return [];
+  // hat → html 텍스트 기준 안정 정렬
+  return [...arr].sort((a,b)=>{
+    const h1=_lc(a?.hat), h2=_lc(b?.hat);
+    if(h1!==h2) return _locale(h1,h2);
+    const t1=_lc(a?.html), t2=_lc(b?.html);
+    if(t1!==t2) return _locale(t1,t2);
+    return 0;
+  });
+}
+
+function canonicalizeProject(proj){
+  if(!proj) return { stage:[], sprites:{} };
+
+  // 1) Stage(무대) 스택 정렬
+  const stage = sortStacks(proj.stage);
+
+  // 2) Sprites 사전식 정렬
+  const sprites = {};
+  const names = Object.keys(proj.sprites || {}).sort(_locale);
+  for(const n of names){
+    sprites[n] = sortStacks(proj.sprites[n]);
+  }
+  return { stage, sprites };
+}
+
+function canonicalizePayload(payload){
+  // payload 가 문자열이면 파싱
+  const obj = (typeof payload==='string') ? JSON.parse(payload) : (payload||{});
+  return {
+    answer: canonicalizeProject(obj.answer),
+    submit: canonicalizeProject(obj.submit),
+  };
+}
 function openFullCode(idx){
-  const payload = FULL[idx];
-  if(!payload){ return; }
+  const raw = FULL[idx];
+  if(!raw) return;
+
+  // 🚩 항상 정렬된 페이로드로 변환
+  const payload = canonicalizePayload(raw);
 
   const wrap = document.getElementById('fullcode-content');
   wrap.innerHTML = renderCompare(payload);
@@ -587,22 +630,18 @@ function openFullCode(idx){
 function renderCompare(data){
   const left  = renderSide("정답",  data.answer);
   const right = renderSide("제출",  data.submit);
-  return `
-    <div class="fc-grid">
-      ${left}
-      ${right}
-    </div>`;
+  return `<div class="fc-grid">${left}${right}</div>`;
 }
 
 function renderSide(title, proj){
   const sec = [];
-  sec.push(`<div><h4 style="margin:8px 0;">${title}</h4>`);
+  sec.push(`<div class="fc-col"><h4 style="margin:8px 0;">${title}</h4>`);
 
-  // Stage
+  // Stage(정렬 완료본 사용)
   sec.push(renderEntity("무대(Stage)", proj.stage));
 
-  // Sprites
-  const names = Object.keys(proj.sprites || {});
+  // Sprites: 이름 사전식 순서(정렬 완료본 사용)
+  const names = Object.keys(proj.sprites || {}).sort((a,b)=>a.localeCompare(b,'ko-KR'));
   for(const n of names){
     sec.push(renderEntity(`스프라이트: ${n}`, proj.sprites[n]));
   }
@@ -611,16 +650,18 @@ function renderSide(title, proj){
 }
 
 function renderEntity(name, stacks){
-  if(!stacks || !stacks.length){ return `<details open><summary>${name}</summary><div style="color:#888;">(스택 없음)</div></details>`; }
-  const items = stacks.map((s, i) => `
+  const rows = sortStacks(stacks); // 혹시라도 외부에서 섞여 들어오면 한 번 더 보정
+  if(!rows.length){
+    return `<details open><summary>${name}</summary><div style="color:#888;">(스택 없음)</div></details>`;
+  }
+  const items = rows.map(s => `
     <div style="margin:8px 0; padding:8px; border:1px solid #ddd; border-radius:8px;">
-      <div style="font-weight:600; margin-bottom:6px;">${s.hat}</div>
-      <div class="stack-html">${s.html}</div>
+      <div style="font-weight:600; margin-bottom:6px;">${s.hat ?? ''}</div>
+      <div class="stack-html">${s.html ?? ''}</div>
     </div>
   `).join("");
-  return `<details open><summary>${name} (${stacks.length})</summary>${items}</details>`;
+  return `<details open><summary>${name} (${rows.length})</summary>${items}</details>`;
 }
-
 
 
 function showPdf(pdfPath, page) {
