@@ -7,63 +7,186 @@ from bootstrap import jinja2
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 import sys
-
+# html_report.py
+import json
+def get_next_regrade_count(output_dir):
+    output_dir = Path(output_dir)
+    existing = list(output_dir.glob("재채점_*회차_채점결과.html"))
+    return len(existing) + 1
 
 def format_time(seconds):
     minutes = int(seconds) // 60
     secs = int(seconds) % 60
     return f"{minutes}분 {secs}초"
+# ===== JSON 정렬/표준화 유틸 =====
+def _try_parse_json(x):
+    # dict/list면 그대로, 문자열이면 JSON으로 파싱 시도
+    if isinstance(x, (dict, list)):
+        return x
+    if isinstance(x, str):
+        try:
+            return json.loads(x)
+        except Exception:
+            return x  # 그냥 텍스트 코드면 원문 유지
+    return x
 
+def _canonicalize(obj):
+    # dict: 키 정렬 + 재귀
+    if isinstance(obj, dict):
+        return {k: _canonicalize(obj[k]) for k in sorted(obj)}
+    # list: 원소가 dict들이고 공통 키가 있으면 그 키 기준으로 정렬
+    if isinstance(obj, list):
+        if all(isinstance(el, dict) for el in obj) and len(obj) > 1:
+            for key in ["name","id","idx","index","order","opcode","target","type"]:
+                if all(key in el for el in obj):
+                    return [_canonicalize(el) for el in sorted(obj, key=lambda d: str(d.get(key)))]
+        return [_canonicalize(el) for el in obj]
+    return obj
 
-def save_results_as_html(results, meta_path=None, output_filename="채점결과.html"):
+def to_pretty_sorted_json(x):
+    y = _try_parse_json(x)
+    if isinstance(y, (dict, list)):
+        y = _canonicalize(y)
+        return json.dumps(y, ensure_ascii=False, indent=2, sort_keys=True)
+    # dict/list가 아니면(그냥 코드 텍스트 등) 원문을 반환
+    return "" if y is None else str(y)
 
+#def save_results_as_html(results, meta_path=None, output_filename=None, regrade_mode=False):
+def save_results_as_html(results, meta_path=None, regrade_mode=False, output_filename=None):
     import json
 
-    # 🔍 meta.json에서 시간 정보 불러오기
+    # 시간 로그
     time_log = {}
     total_time = 0
+    username = "unknown"
+    exam_round_name = "시험"
+    date_str = datetime.now().strftime("%Y%m%d")
 
     if meta_path and os.path.exists(meta_path):
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
             time_log = meta.get("time_log", {})
             total_time = meta.get("total_time", 0)
+            username = meta.get("username", "unknown")
+            exam_round_name = meta.get("exam_round_name", "시험")
+            date_str = meta.get("date", date_str)
 
-    # 각 결과 항목에 시간 정보 추가
     for i, r in enumerate(results):
         문제키 = f"문제{i+1}"
         sec = time_log.get(문제키, 0)
         r["풀이시간"] = format_time(sec)
 
-    # 🔧 열기 버튼용 배치 파일 생성
-    # generate_open_batch_files(results)
-
-    # 템플릿 경로 설정 (PyInstaller 실행 대비)
+    # 템플릿 로드
     if getattr(sys, "frozen", False):
-        # PyInstaller 실행 시 (_MEIPASS는 임시폴더)
         base_path = Path(sys._MEIPASS)
     else:
-        # 일반 실행 시
         base_path = Path(__file__).parent
 
     template_dir = base_path / "templates"
     env = Environment(loader=FileSystemLoader(searchpath=template_dir))
-
-    today = datetime.now().strftime("%Y-%m-%d")
-
     template = env.get_template("report_template.html")
 
     correct_count = sum(1 for r in results if r["정답여부"] == "O")
-    rendered_html = template.render(
+    today = datetime.now().strftime("%Y-%m-%d")
+    desktop = Path.home() / "Desktop"
+
+    # 🔁 파일명 구성
+    safe_exam_name = exam_round_name.replace(" ", "_").replace(".", "").replace(":", "")
+    if regrade_mode:
+        regrade_count = get_next_regrade_count(desktop)
+        filename = f"{date_str}_{username}_{safe_exam_name}_재채점_{regrade_count}회차_채점결과.html"
+    else:
+        filename = f"{date_str}_{username}_{safe_exam_name}_채점결과.html"
+        regrade_count = None
+
+    output_path = desktop / filename
+    print(f"output_path: {output_path}")
+    # 전체코드: 항목별로 "정렬+예쁘게" 만든 문자열 리스트
+    fullcode_blob_sorted = [to_pretty_sorted_json(r.get("_fullcode")) for r in results]
+
+    # (선택) 행 단위로도 바로 쓰고 싶으면 각 결과에 넣어 둠
+    for i, r in enumerate(results):
+        r["전체코드(정렬)"] = fullcode_blob_sorted[i]
+
+    html = template.render(
         results=results,
         correct_count=correct_count,
         today=today,
-        total_time_str=format_time(total_time),  # ← 이 한 줄만 추가!
+        total_time_str=format_time(total_time),
+        regrade_count=regrade_count,
+        # 템플릿에서 기존처럼 JS로 파싱해 쓰는 경우를 위해 JSON 문자열로 전달
+        fullcode_json=json.dumps(fullcode_blob_sorted, ensure_ascii=False)
     )
 
-    output_path = Path.home() / "Desktop" / output_filename
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(rendered_html)
 
-    print(f"\n📄 채점 결과 리포트가 저장되었습니다: {output_path}")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print(f"📄 HTML 저장 완료: {output_path}")
     webbrowser.open(f"file://{output_path.resolve()}")
+
+
+
+# def save_results_as_html(results, meta_path=None, output_filename="채점결과.html", output_dir=None, regrade_count=None):
+
+#     import json
+
+#     # 🔍 meta.json에서 시간 정보 불러오기
+#     time_log = {}
+#     total_time = 0
+
+#     if meta_path and os.path.exists(meta_path):
+#         with open(meta_path, "r", encoding="utf-8") as f:
+#             meta = json.load(f)
+#             time_log = meta.get("time_log", {})
+#             total_time = meta.get("total_time", 0)
+
+#     # 각 결과 항목에 시간 정보 추가
+#     for i, r in enumerate(results):
+#         문제키 = f"문제{i+1}"
+#         sec = time_log.get(문제키, 0)
+#         r["풀이시간"] = format_time(sec)
+
+#     # 🔧 열기 버튼용 배치 파일 생성
+#     # generate_open_batch_files(results)
+
+#     # 템플릿 경로 설정 (PyInstaller 실행 대비)
+#     if getattr(sys, "frozen", False):
+#         # PyInstaller 실행 시 (_MEIPASS는 임시폴더)
+#         base_path = Path(sys._MEIPASS)
+#     else:
+#         # 일반 실행 시
+#         base_path = Path(__file__).parent
+
+#     template_dir = base_path / "templates"
+#     env = Environment(loader=FileSystemLoader(searchpath=template_dir))
+
+#     today = datetime.now().strftime("%Y-%m-%d")
+
+#     template = env.get_template("report_template.html")
+
+#     correct_count = sum(1 for r in results if r["정답여부"] == "O")
+#     rendered_html = template.render(
+#         results=results,
+#         correct_count=correct_count,
+#         today=today,
+#         total_time_str=format_time(total_time),  # ← 이 한 줄만 추가!
+#                 regrade_count=regrade_count,  # ← 템플릿에서 사용 가능하게 넘겨줌
+
+#     )
+
+#     if output_dir is None:
+#         output_path = Path.home() / "Desktop" / output_filename
+#     else:
+#         output_path = Path(output_dir) / output_filename
+
+#     if regrade_count is not None:
+#         regrade_count = get_next_regrade_count(output_dir)
+#         output_filename = f"재채점_{regrade_count}회차_채점결과.html"
+    
+#     #output_path = Path.home() / "Desktop" / output_filename
+#     with open(output_path, "w", encoding="utf-8") as f:
+#         f.write(rendered_html)
+
+#     print(f"\n📄 채점 결과 리포트가 저장되었습니다: {output_path}")
+#     webbrowser.open(f"file://{output_path.resolve()}")

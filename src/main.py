@@ -1,13 +1,32 @@
 from exam_selector import ExamSelector
 from loading_json import load_config
-from pathlib import Path
 from html_report import save_results_as_html
 import traceback
+from tkinter import Tk, filedialog
+from markupsafe import Markup
+from pathlib import Path
+
+
 
 # 사용 예시
 config = load_config()
-default_exam_folder = config["default_exam_folder"]
+#default_exam_folder = config["default_exam_folder"]
+default_exam_folder = config["default_exam_folder_toDCT2"]
 
+default_exam_folder = Path(default_exam_folder)
+
+# 💡 사용자에게 문제 폴더 경로 선택할 기회 제공
+# root = Tk()
+# root.withdraw()  # GUI 창 숨기기
+# user_selected_folder = filedialog.askdirectory(
+#     title="시험 폴더 루트를 선택하세요", initialdir=default_exam_folder
+# )
+# root.destroy()
+
+# if user_selected_folder:
+#     default_exam_folder = Path(user_selected_folder)
+
+print(f"📁 사용된 시험 폴더 루트: {default_exam_folder}")
 
 if __name__ == "__main__":
 
@@ -37,3 +56,4 @@ if __name__ == "__main__":
     except Exception as e:
         print("⚠️ 예외 발생:")
         traceback.print_exc()
+
